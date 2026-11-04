@@ -199,10 +199,20 @@ function compute(d) {
     return { ...g, assets, debt: d.debts[g.key], equity: assets - d.debts[g.key] };
   });
   return {
-    stockTotal, goldTotal, bankTotal, actual, total, debt, net, pct, spent, groups, fireTarget,
+    stockTotal,
+    goldTotal,
+    bankTotal,
+    actual,
+    total,
+    debt,
+    net,
+    pct,
+    spent,
+    groups,
+    fireTarget,
     surplus: d.income - spent,
     firePct: fireTarget > 0 ? Math.max(0, (net / fireTarget) * 100) : 0,
-    targetSum: sum(CLASSES, (c) => d.targets[c.key]),
+    targetSum: sum(CLASSES, (c) => d.targets[c.key])
   };
 }
 function simulatePrice(r) {
