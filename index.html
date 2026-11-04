@@ -1000,7 +1000,7 @@ function useClock() {
 
 function App() {
   const [view, setView] = useState(loadView);
-  const [store, setStore] = useState(null);
+  const [store, setStore] = useState(loadStore);
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(false);
   const [modal, setModal] = useState(false);
@@ -1025,12 +1025,9 @@ function App() {
             original: normalize(raw.original, makeOriginal()),
             demo: normalize(raw.demo, makeDemo()),
           });
-        } else {
-           setStore(loadStore()); 
         }
       } catch (e) {
         console.error('Lỗi tải dữ liệu Supabase:', e);
-        setStore(loadStore()); // Lỗi mạng thì đọc tạm ở máy
       } finally {
         setLoading(false);
       }
@@ -1038,7 +1035,14 @@ function App() {
     initData();
   }, []);
 
-  // LƯU DỮ LIỆU LÊN SUPABASE
+  // TẤT CẢ CÁC HOOKS PHẢI NẰM TRÊN LỆNH RETURN
+  const mode = store.mode;
+  const isDemo = mode === 'demo';
+  const data = store[mode];
+  const setData = useCallback((fn) => setStore((s) => ({ ...s, [s.mode]: fn(s[s.mode]) })), []);
+  const c = useMemo(() => compute(data), [data]);
+
+  // TỰ ĐỘNG LƯU SUPABASE VỚI DEBOUNCE
   const saveTimeout = useRef(null);
   useEffect(() => {
     if (loading || !store) return;
@@ -1073,15 +1077,6 @@ function App() {
     return () => clearTimeout(t);
   }, [confirmReset]);
 
-  // HIỂN THỊ MÀN HÌNH CHỜ KHI ĐANG TẢI DB
-  if (loading || !store) return <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-500 font-bold">Đang đồng bộ dữ liệu đám mây...</div>;
-
-  const mode = store.mode;
-  const isDemo = mode === 'demo';
-  const data = store[mode];
-  const setData = useCallback((fn) => setStore((s) => ({ ...s, [s.mode]: fn(s[s.mode]) })), []);
-  const c = useMemo(() => compute(data), [data]);
-
   const setMode = (m) => setStore((s) => ({ ...s, mode: m }));
   const doReset = () => {
     if (!confirmReset) { setConfirmReset(true); return; }
@@ -1115,7 +1110,7 @@ function App() {
                 <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-1">BÁO CÁO TỔNG QUAN GIA SẢN</h1>
                 <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-1.5">
                   <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" /></span>
-                  Đã kết nối Supabase Cloud | VNĐ · <span className="tnum">{clock}</span>
+                  {loading ? 'Đang đồng bộ Supabase...' : 'Đã kết nối Supabase Cloud'} | VNĐ · <span className="tnum">{clock}</span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
