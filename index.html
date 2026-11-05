@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="WealthOS">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="format-detection" content="telephone=no">
   <title>WealthOS Gia Sản</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,20 +17,20 @@
   <!-- TÍCH HỢP SUPABASE -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const supabaseUrl = 'https://bxcroowxyxndqeqeecjz.supabase.co';
-    const supabaseKey = 'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V';
-    window.supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
-
-    // Chặn tuyệt đối thao tác chụm 2 ngón tay zoom (pinch-to-zoom) và double-tap zoom trên iOS Safari
-    document.addEventListener('gesturestart', function (e) {
-      e.preventDefault();
-    }, { passive: false });
-    document.addEventListener('gesturechange', function (e) {
-      e.preventDefault();
-    }, { passive: false });
-    document.addEventListener('gestureend', function (e) {
-      e.preventDefault();
-    }, { passive: false });
+    // Chặn pinch-to-zoom trên iOS Safari (double-tap zoom đã chặn bằng touch-action: manipulation)
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
+      document.addEventListener(name, function (e) { e.preventDefault(); }, { passive: false });
+    });
+    // Khởi tạo Supabase. Nếu CDN lỗi thì app vẫn chạy ở chế độ chỉ lưu trên máy.
+    window.supabaseClient = null;
+    try {
+      window.supabaseClient = window.supabase.createClient(
+        'https://bxcroowxyxndqeqeecjz.supabase.co',
+        'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V'
+      );
+    } catch (e) {
+      console.error('Không khởi tạo được Supabase:', e);
+    }
   </script>
 
   <script>
@@ -46,46 +49,32 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 
   <style>
-    :root {
-      --bg: #f8fafc;
-      --ink: #0f172a;
-      --accent: #4f46e5;
-      color-scheme: light;
-      box-sizing: border-box;
-      padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-      touch-action: pan-x pan-y;
-    }
+    :root { --bg: #f8fafc; --ink: #0f172a; --accent: #4f46e5; color-scheme: light; }
+    *, *::before, *::after { -webkit-tap-highlight-color: transparent; }
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      max-width: 100vw;
-      overflow-x: hidden;
-      background: var(--bg);
-      color: var(--ink);
+      margin: 0; padding: 0; width: 100%; max-width: 100vw; overflow-x: hidden;
+      background: var(--bg); color: var(--ink);
       font-family: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
-      font-size: 14px;
-      -webkit-text-size-adjust: 100%;
-      overscroll-behavior-x: none;
-      touch-action: manipulation;
+      font-size: 14px; -webkit-text-size-adjust: 100%;
+      overscroll-behavior-x: none; touch-action: manipulation;
     }
+    /* Chế độ app (iPhone): khóa trang, chỉ vùng nội dung bên trong được cuộn dọc */
+    html.lock { overflow: hidden; height: 100%; }
+    body.lock { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: pan-y; }
+    .app-scroll {
+      overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-width: none;
+    }
+    .app-scroll::-webkit-scrollbar { display: none; }
     /* Ngăn iOS tự động zoom khi chạm vào ô input có font < 16px */
     @media screen and (max-width: 768px) {
-      input, select, textarea {
-        font-size: 16px !important;
-      }
+      input, select, textarea { font-size: 16px !important; }
     }
     .tnum { font-variant-numeric: tabular-nums; }
-    button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-    }
+    button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     input[type="date"] { color-scheme: light; }
     .thin-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
-    @media (prefers-reduced-motion: reduce) {
-      * { transition: none !important; animation: none !important; }
-    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
   </style>
 </head>
 <body>
@@ -151,9 +140,9 @@ const CLASSES = [
   { key: 'estate', label: 'Bất động sản', group: 'fixed', color: '#0ea5e9', ink: '#0369a1' },
 ];
 const GROUPS = [
-  { key: 'risk', label: 'Tài sản rủi ro', sub: 'Cổ phiếu / Crypto', debtLabel: 'Vay margin', debtColor: '#f97316' },
-  { key: 'safe', label: 'Tài sản an toàn', sub: 'Vàng / Tiền gửi / Tiền mặt', debtLabel: 'Nợ khác (tín chấp)', debtColor: '#eab308' },
-  { key: 'fixed', label: 'Tài sản cố định', sub: 'Bất động sản / Nợ phải đòi', debtLabel: 'Vay thế chấp', debtColor: '#dc2626' },
+  { key: 'risk', label: 'Tài sản rủi ro', sub: 'Cổ phiếu / Crypto', debtLabel: 'Vay margin', debtColor: '#f97316', debtInk: '#c2410c' },
+  { key: 'safe', label: 'Tài sản an toàn', sub: 'Vàng / Tiền gửi / Tiền mặt', debtLabel: 'Nợ khác (tín chấp)', debtColor: '#eab308', debtInk: '#a16207' },
+  { key: 'fixed', label: 'Tài sản cố định', sub: 'Bất động sản / Nợ phải đòi', debtLabel: 'Vay thế chấp', debtColor: '#dc2626', debtInk: '#b91c1c' },
 ];
 const GOAL_SOURCES = [
   { key: 'bank', label: 'Tiền gửi NH', color: '#0d9488', bg: 'bg-teal-50 text-teal-800 border-teal-200' },
@@ -319,6 +308,10 @@ const ICONS = {
   edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z',
   alert: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01',
   sparkles: 'M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z',
+  home: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10',
+  pie: 'M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z',
+  wallet: 'M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4z',
+  target: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0zM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
 };
 
 function Icon({ name, size = 16 }) {
@@ -421,11 +414,11 @@ function IconBtn({ onClick, label, icon, tone = 'slate' }) {
   return <button type="button" onClick={onClick} aria-label={label} title={label} className={`p-1 rounded-md text-slate-400 transition ${t}`}><Icon name={icon} size={14} /></button>;
 }
 
-function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '' }) {
+function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '', small = false }) {
   return (
     <div className={`rounded-2xl border p-4 min-w-0 ${dark ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-900'} ${className}`}>
       <p className={`text-[10px] font-bold uppercase tracking-wider ${dark ? 'text-indigo-200' : 'text-slate-500'}`}>{label}</p>
-      <div className="text-2xl font-extrabold tnum mt-1 leading-tight">{children}</div>
+      <div className={`${small ? 'text-[19px]' : 'text-2xl'} font-extrabold tnum mt-1 leading-tight`}>{children}</div>
       <p className={`text-xs mt-1 truncate tnum ${dark ? 'text-slate-300' : 'text-slate-500'}`}>{sub}</p>
       {bar !== undefined && (
         <div className={`h-1.5 rounded-full mt-2.5 overflow-hidden ${dark ? 'bg-white/15' : 'bg-slate-100'}`}>
@@ -532,7 +525,7 @@ function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
   );
 }
 
-function AllocationCard({ data, setData, c }) {
+function AllocationCard({ data, setData, c, view }) {
   const setTarget = (k, v) => setData((d) => ({ ...d, targets: { ...d.targets, [k]: v } }));
   const targetOk = Math.abs(c.targetSum - 100) < 0.001;
   const autos = { stock: c.stockTotal, gold: c.goldTotal, bank: c.bankTotal };
@@ -559,7 +552,7 @@ function AllocationCard({ data, setData, c }) {
     <Card title="Cơ cấu danh mục đầu tư" right={<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${targetOk ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`} role={targetOk ? undefined : 'alert'}>MỤC TIÊU: {pcv(c.targetSum, Number.isInteger(c.targetSum) ? 0 : 1)}</span>}>
       <div className="flex justify-center"><DonutChart actual={c.actual} targets={data.targets} total={c.total} /></div>
       <p className="text-[10px] text-center text-slate-400 mt-1 mb-3">Vòng ngoài: thực tế · Vòng trong: mục tiêu</p>
-      <div className="grid grid-cols-[10px_minmax(0,1fr)_112px_40px_52px] items-center gap-x-2 gap-y-1.5 text-xs">
+      <div className={`grid ${view === 'phone' ? 'grid-cols-[10px_minmax(0,1fr)_92px_34px_46px]' : 'grid-cols-[10px_minmax(0,1fr)_112px_40px_52px]'} items-center gap-x-2 gap-y-1.5 text-xs`}>
         <span /><span /><span className="text-[10px] font-semibold text-slate-400 text-right">Giá trị (₫)</span><span className="text-[10px] font-semibold text-slate-400 text-right">TT</span><span className="text-[10px] font-semibold text-slate-400 text-right">MT %</span>
         {CLASSES.map((cl) => (
           <React.Fragment key={cl.key}>
@@ -613,52 +606,242 @@ function AllocationCard({ data, setData, c }) {
   );
 }
 
-function StackedCard({ data, setData, c }) {
-  const axis = niceAxis(Math.max(...c.groups.map((g) => g.assets)));
-  const setDebt = (k, v) => setData((d) => ({ ...d, debts: { ...d.debts, [k]: v } }));
+/* ---------- Nhận định tự động ---------- */
+const TONES = {
+  good: { dot: 'bg-emerald-500', head: 'text-emerald-700' },
+  info: { dot: 'bg-indigo-500', head: 'text-indigo-700' },
+  warn: { dot: 'bg-amber-500', head: 'text-amber-700' },
+  bad: { dot: 'bg-rose-500', head: 'text-rose-700' },
+};
+function Insight({ items, title = 'Nhận định' }) {
+  if (!items || items.length === 0) return null;
   return (
-    <Card title="Tài sản & nợ theo nhóm thanh khoản" right={<span className="text-[11px] font-semibold text-slate-500 tnum">Vốn chủ {compact(c.net)} · Nợ {compact(c.debt)}</span>}>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-xs text-slate-600">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-blue-600" />Vốn chủ sở hữu</span>
-        {GROUPS.map((g) => <span key={g.key} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: g.debtColor }} />{g.debtLabel}</span>)}
+    <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700 mb-2"><Icon name="sparkles" size={13} />{title}</div>
+      <ul className="space-y-1.5">
+        {items.map((it, i) => (
+          <li key={i} className="flex gap-2 text-xs leading-relaxed text-slate-700">
+            <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${TONES[it.tone].dot}`} aria-hidden="true" />
+            <span className="min-w-0"><b className={TONES[it.tone].head}>{it.head}</b> {it.body}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function topAssetInsights(items, c, data) {
+  const out = [];
+  if (!items.length || c.total <= 0) return out;
+  const top = items[0];
+  const t1 = (top.value / c.total) * 100;
+  const t3 = (sum(items.slice(0, 3), (a) => a.value) / c.total) * 100;
+  if (t1 >= 50) out.push({ tone: 'warn', head: 'Tập trung cao.', body: `${top.name} chiếm ${pcv(t1, 0)} tổng tài sản. Nếu tài sản này mất 10% giá trị, tổng tài sản giảm ${pcv(t1 / 10, 1)}.` });
+  else if (t1 >= 30) out.push({ tone: 'info', head: 'Khá tập trung.', body: `${top.name} chiếm ${pcv(t1, 0)}, top 3 chiếm ${pcv(t3, 0)} tổng tài sản.` });
+  else out.push({ tone: 'good', head: 'Phân tán tốt.', body: `Tài sản lớn nhất chỉ chiếm ${pcv(t1, 0)}, top 3 chiếm ${pcv(t3, 0)} tổng tài sản.` });
+  if (data.estate > 0 && data.debts.fixed > 0) {
+    const ltv = (data.debts.fixed / data.estate) * 100;
+    out.push({ tone: ltv > 70 ? 'bad' : ltv > 50 ? 'warn' : 'info', head: 'Đòn bẩy bất động sản.', body: `Vay thế chấp bằng ${pcv(ltv, 0)} giá trị ${data.estateName || 'bất động sản'}. Phần sở hữu thực còn ${compact(data.estate - data.debts.fixed)}.` });
+  }
+  const liquid = c.actual.stock + c.actual.gold + c.actual.bank + c.actual.cash;
+  const lp = (liquid / c.total) * 100;
+  out.push({ tone: lp >= 40 ? 'good' : lp >= 20 ? 'info' : 'warn', head: 'Thanh khoản.', body: `${pcv(lp, 0)} tài sản (${compact(liquid)}) quy ra tiền được trong vài ngày, ${pcv(100 - lp, 0)} nằm ở tài sản khó bán nhanh.` });
+  if (c.pct.recv >= 10) out.push({ tone: 'warn', head: 'Nợ phải đòi.', body: `Chiếm ${pcv(c.pct.recv, 0)} tổng tài sản. Nên chốt thời hạn thu hồi để tránh tiền bị treo.` });
+  return out;
+}
+
+function spendingInsights(data, c) {
+  const out = [];
+  if (data.income > 0) {
+    const sr = (c.surplus / data.income) * 100;
+    if (c.surplus < 0) out.push({ tone: 'bad', head: 'Chi vượt thu.', body: `Mỗi tháng âm ${compact(-c.surplus)}, tài sản đang bị bào mòn. Cần cắt chi hoặc tăng thu ngay.` });
+    else if (sr >= 30) out.push({ tone: 'good', head: 'Tiết kiệm xuất sắc.', body: `Giữ lại ${pcv(sr, 0)} thu nhập (${compact(c.surplus)}/tháng), vượt xa mốc 20% thường được khuyến nghị.` });
+    else if (sr >= 20) out.push({ tone: 'good', head: 'Tiết kiệm tốt.', body: `Giữ lại ${pcv(sr, 0)} thu nhập (${compact(c.surplus)}/tháng), đạt mốc 20% khuyến nghị.` });
+    else if (sr >= 10) out.push({ tone: 'warn', head: 'Tiết kiệm trung bình.', body: `Mới giữ lại ${pcv(sr, 0)} thu nhập. Cần thêm ${compact(data.income * 0.2 - c.surplus)}/tháng để chạm mốc 20%.` });
+    else out.push({ tone: 'warn', head: 'Tiết kiệm thấp.', body: `Chỉ giữ lại ${pcv(sr, 0)} thu nhập (${compact(c.surplus)}/tháng). Nên rà lại nhóm chi lớn nhất.` });
+  }
+  if (data.budget > 0) {
+    const u = (c.spent / data.budget) * 100;
+    if (u > 100) out.push({ tone: 'bad', head: 'Vượt ngân sách.', body: `Chi ${compact(c.spent)} so với ngân sách ${compact(data.budget)}, vượt ${compact(c.spent - data.budget)} (${pcv(u - 100, 0)}).` });
+    else if (u >= 85) out.push({ tone: 'warn', head: 'Sát ngân sách.', body: `Đã dùng ${pcv(u, 0)} ngân sách, còn ${compact(data.budget - c.spent)}.` });
+    else out.push({ tone: 'good', head: 'Trong ngân sách.', body: `Đã dùng ${pcv(u, 0)} ngân sách, còn dư ${compact(data.budget - c.spent)}.` });
+  }
+  const cats = data.categories.map((k) => ({ name: k.name || '(chưa đặt tên)', v: catTotal(k) })).filter((k) => k.v > 0).sort((a, b) => b.v - a.v);
+  if (cats.length >= 2 && c.spent > 0) {
+    const sh = (cats[0].v / c.spent) * 100;
+    out.push({ tone: sh >= 55 ? 'warn' : 'info', head: 'Nhóm chi lớn nhất.', body: `${cats[0].name} chiếm ${pcv(sh, 0)} chi tiêu (${compact(cats[0].v)}/tháng)${sh >= 55 ? ', nên xem có khoản nào cắt được.' : '.'}` });
+  }
+  if (c.spent > 0) {
+    const m = (c.bankTotal + data.cash) / c.spent;
+    out.push({ tone: m >= 6 ? 'good' : m >= 3 ? 'info' : 'warn', head: 'Quỹ dự phòng.', body: `Tiền gửi + tiền mặt đủ chi ${trim2(m)} tháng (chuẩn khuyến nghị 6 tháng).` });
+    out.push({ tone: 'info', head: 'Tác động tới FIRE.', body: `Theo quy tắc 25 lần chi tiêu năm, mục tiêu FIRE là ${compact(c.spent * 300)}. Cắt thêm 1 triệu/tháng sẽ giảm mục tiêu này 300 triệu.` });
+  }
+  return out;
+}
+
+function portfolioInsights(tabKey, data, c) {
+  const out = [];
+  const cls = tabKey === 'stocks' ? 'stock' : tabKey === 'gold' ? 'gold' : 'bank';
+  const rows = data[tabKey];
+  const label = { stocks: 'cổ phiếu', gold: 'vàng', savings: 'tiền gửi' }[tabKey];
+  if (rows.length === 0) return [{ tone: 'info', head: 'Chưa có dữ liệu.', body: `Thêm ${label} để xem nhận định về danh mục.` }];
+  const gap = c.pct[cls] - data.targets[cls];
+  const gapText = Math.abs(gap) <= 2 ? ', đang cân đối.' : gap < 0 ? `, thiếu ${pcv(-gap, 0)} (khoảng ${compact((-gap / 100) * c.total)}).` : `, vượt ${pcv(gap, 0)} (khoảng ${compact((gap / 100) * c.total)}).`;
+  out.push({ tone: Math.abs(gap) <= 2 ? 'good' : 'warn', head: 'Tỷ trọng nhóm.', body: `${label.charAt(0).toUpperCase() + label.slice(1)} chiếm ${pcv(c.pct[cls], 0)} tổng tài sản so với mục tiêu ${pcv(data.targets[cls], 0)}${gapText}` });
+
+  if (tabKey === 'stocks') {
+    const list = rows.filter((r) => r.qty > 0 && r.price > 0);
+    if (list.length === 0) return out;
+    const tv = sum(list, (r) => r.qty * r.price), cost = sum(list, (r) => r.qty * r.cost), pnl = tv - cost;
+    out.push({ tone: pnl >= 0 ? 'good' : 'warn', head: 'Hiệu suất.', body: `${pnl >= 0 ? 'Lãi' : 'Lỗ'} ${compact(Math.abs(pnl))} (${pcv(cost > 0 ? (pnl / cost) * 100 : 0)}) so với giá vốn ${compact(cost)}.` });
+    const ranked = list.filter((r) => r.cost > 0).map((r) => ({ code: r.code || '?', p: ((r.price - r.cost) / r.cost) * 100 })).sort((a, b) => b.p - a.p);
+    if (ranked.length >= 2) {
+      const b = ranked[0], w = ranked[ranked.length - 1];
+      out.push({ tone: w.p < 0 ? 'warn' : 'info', head: 'Mã nổi bật.', body: `${b.code} tốt nhất (${b.p >= 0 ? '+' : ''}${pcv(b.p)}), ${w.code} yếu nhất (${w.p >= 0 ? '+' : ''}${pcv(w.p)})${w.p < 0 ? '. Nên xem lại luận điểm đầu tư của mã này.' : '.'}` });
+    }
+    const top = list.slice().sort((a, b) => b.qty * b.price - a.qty * a.price)[0];
+    const ts = ((top.qty * top.price) / tv) * 100;
+    if (list.length >= 2 && ts >= 50) out.push({ tone: 'warn', head: 'Tập trung một mã.', body: `${top.code || '?'} chiếm ${pcv(ts, 0)} giá trị cổ phiếu, rủi ro riêng lẻ cao.` });
+    const gaps = list.map((r) => { const a = ((r.qty * r.price) / tv) * 100; return { code: r.code || '?', a, t: r.target, d: a - r.target }; }).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+    if (gaps[0] && Math.abs(gaps[0].d) >= 5) out.push({ tone: 'info', head: 'Lệch target.', body: `${gaps[0].code} đang ${pcv(gaps[0].a, 0)} so với target ${pcv(gaps[0].t, 0)}, nên ${gaps[0].d > 0 ? 'giảm' : 'tăng'} khoảng ${compact((Math.abs(gaps[0].d) / 100) * tv)}.` });
+    const tsum = sum(rows, (r) => r.target);
+    if (Math.abs(tsum - 100) > 0.001) out.push({ tone: 'warn', head: 'Tổng % target.', body: `Đang là ${pcv(tsum, 0)}, cần chỉnh về 100% để tính độ lệch chính xác.` });
+    if (data.debts.risk > 0) out.push({ tone: 'warn', head: 'Đang vay margin.', body: `Dư nợ ${compact(data.debts.risk)} bằng ${pcv(c.stockTotal > 0 ? (data.debts.risk / c.stockTotal) * 100 : 0, 0)} giá trị cổ phiếu. Lãi vay sẽ ăn vào lợi nhuận khi thị trường đi ngang.` });
+  } else if (tabKey === 'gold') {
+    const list = rows.filter((r) => r.qty > 0 && r.price > 0);
+    if (list.length === 0) return out;
+    const qty = sum(list, (r) => r.qty), tv = sum(list, (r) => r.qty * r.price), cost = sum(list, (r) => r.qty * r.cost), pnl = tv - cost;
+    out.push({ tone: pnl >= 0 ? 'good' : 'warn', head: 'Hiệu suất.', body: `Nắm giữ ${trim2(qty)} chỉ, ${pnl >= 0 ? 'lãi' : 'lỗ'} ${compact(Math.abs(pnl))} (${pcv(cost > 0 ? (pnl / cost) * 100 : 0)}) so với giá vốn.` });
+    out.push({ tone: 'info', head: 'Giá bình quân.', body: `Giá vốn bình quân ${compact(cost / qty)}/chỉ, giá hiện tại bình quân ${compact(tv / qty)}/chỉ.` });
+    out.push({ tone: 'info', head: 'Vai trò của vàng.', body: 'Vàng không sinh lãi, vai trò là giữ giá trị. Chỉ nên mua thêm khi tỷ trọng đang thấp hơn mục tiêu.' });
+    const tsum = sum(rows, (r) => r.target);
+    if (Math.abs(tsum - 100) > 0.001) out.push({ tone: 'warn', head: 'Tổng % target.', body: `Đang là ${pcv(tsum, 0)}, cần chỉnh về 100% để tính độ lệch chính xác.` });
+  } else {
+    const list = rows.filter((r) => r.principal > 0);
+    if (list.length === 0) return out;
+    const tp = sum(list, (r) => r.principal);
+    const avg = sum(list, (r) => r.principal * r.rate) / tp;
+    const interest = sum(list, (r) => (r.principal * r.rate * r.term) / 1200);
+    out.push({ tone: 'info', head: 'Lãi suất bình quân.', body: `${pcv(avg, 2)}/năm trên ${compact(tp)} gốc, lãi dự kiến cả kỳ ${compact(interest)}.` });
+    const m = list.map((r) => ({ r, d: daysBetween(TODAY, addMonths(parseISO(r.start), Math.round(r.term))) })).sort((a, b) => a.d - b.d)[0];
+    const nm = m.r.bank || '(chưa đặt tên)';
+    if (m.d < 0) out.push({ tone: 'bad', head: 'Đã quá hạn.', body: `Sổ ${nm} quá hạn ${-m.d} ngày, nên tất toán hoặc tái tục sớm.` });
+    else if (m.d <= 30) out.push({ tone: 'warn', head: 'Sắp đáo hạn.', body: `Sổ ${nm} còn ${m.d} ngày, cần quyết định tái tục hay rút ra để đầu tư.` });
+    else out.push({ tone: 'good', head: 'Lịch đáo hạn.', body: `Sổ gần nhất (${nm}) đáo hạn sau ${m.d} ngày, chưa cần xử lý gấp.` });
+    const topB = list.slice().sort((a, b) => b.principal - a.principal)[0];
+    const bs = (topB.principal / tp) * 100;
+    if (list.length >= 2 && bs >= 60) out.push({ tone: 'warn', head: 'Tập trung ngân hàng.', body: `${topB.bank || '(chưa đặt tên)'} giữ ${pcv(bs, 0)} tiền gửi, nên cân nhắc chia sang ngân hàng khác.` });
+  }
+  return out;
+}
+
+/* ---------- Bảng cân đối tài sản & nợ ---------- */
+const GCOLORS = { risk: '#2563eb', safe: '#0d9488', fixed: '#7c3aed' };
+function Tile({ label, value, color, sub }) {
+  return (
+    <div className="rounded-xl bg-slate-50 border border-slate-100 px-2.5 py-2 min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 truncate">{label}</p>
+      <p className={`text-base font-extrabold tnum mt-0.5 truncate ${color}`} title={vnd(value)}>{compact(value)}</p>
+      {sub && <p className="text-[10px] text-slate-500 tnum truncate">{sub}</p>}
+    </div>
+  );
+}
+function RatioChip({ label, value, tone, hint }) {
+  const cls = { good: 'bg-emerald-50 text-emerald-700 border-emerald-100', warn: 'bg-amber-50 text-amber-700 border-amber-100', bad: 'bg-rose-50 text-rose-700 border-rose-100', info: 'bg-slate-50 text-slate-700 border-slate-200' }[tone];
+  return (
+    <div className={`rounded-xl border px-2.5 py-2 min-w-0 ${cls}`} title={hint}>
+      <p className="text-[10px] font-bold uppercase tracking-wide opacity-80 truncate">{label}</p>
+      <p className="text-sm font-extrabold tnum mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+function BalanceCard({ data, setData, c }) {
+  const setDebt = (k, v) => setData((d) => ({ ...d, debts: { ...d.debts, [k]: v } }));
+  const debtPct = c.total > 0 ? Math.min(100, (c.debt / c.total) * 100) : 0;
+  const equityPct = c.total > 0 ? 100 - debtPct : 0;
+  const runway = c.spent > 0 ? (c.bankTotal + data.cash) / c.spent : 0;
+  const riskShare = c.total > 0 ? (c.groups[0].assets / c.total) * 100 : 0;
+  const debtTone = debtPct <= 30 ? 'good' : debtPct <= 50 ? 'warn' : 'bad';
+  const runTone = c.spent <= 0 ? 'info' : runway >= 6 ? 'good' : runway >= 3 ? 'warn' : 'bad';
+  const levTone = { good: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-rose-50 text-rose-700' }[debtTone];
+  return (
+    <Card title="Bảng cân đối tài sản & nợ" right={<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${levTone}`}>ĐÒN BẨY {pcv(debtPct, 0)}</span>}>
+      <div className="grid grid-cols-3 gap-2">
+        <Tile label="Tổng tài sản" value={c.total} color="text-slate-900" />
+        <Tile label="Tổng nợ" value={c.debt} color="text-orange-600" />
+        <Tile label="Vốn chủ sở hữu" value={c.net} color={c.net < 0 ? 'text-rose-600' : 'text-blue-700'} sub={`${pcv(equityPct, 0)} tài sản`} />
       </div>
-      <div className="space-y-5">
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600 mb-1">
+          <span>Cơ cấu nguồn vốn</span>
+          <span className="tnum">Vốn chủ {pcv(equityPct, 0)} · Nợ {pcv(debtPct, 0)}</span>
+        </div>
+        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100" role="img" aria-label={`Vốn chủ ${pcv(equityPct, 0)}, nợ ${pcv(debtPct, 0)}`}>
+          {c.total > 0 && <div style={{ width: equityPct + '%', background: '#2563eb' }} title={`Vốn chủ: ${vnd(c.net)}`} />}
+          {c.total > 0 && debtPct > 0 && <div style={{ width: debtPct + '%', background: '#f97316' }} title={`Nợ: ${vnd(c.debt)}`} />}
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[11px] font-semibold text-slate-600 mb-1">Cơ cấu tài sản theo thanh khoản</div>
+        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-px" role="img" aria-label="Cơ cấu tài sản theo nhóm thanh khoản">
+          {c.groups.map((g) => g.assets > 0 && c.total > 0 ? <div key={g.key} style={{ width: (g.assets / c.total) * 100 + '%', background: GCOLORS[g.key] }} title={`${g.label}: ${vnd(g.assets)}`} /> : null)}
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-slate-600">
+          {c.groups.map((g) => (
+            <span key={g.key} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />{g.label.replace('Tài sản ', '')} <b className="tnum text-slate-800">{pcv(c.total > 0 ? (g.assets / c.total) * 100 : 0, 0)}</b></span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2.5">
         {c.groups.map((g) => {
-          const equityShown = Math.max(0, g.equity);
-          const debtShown = Math.min(g.debt, g.assets);
+          const share = c.total > 0 ? (g.assets / c.total) * 100 : 0;
+          const ltv = g.assets > 0 ? (g.debt / g.assets) * 100 : 0;
+          const eq = Math.max(0, g.equity);
+          const dShown = Math.min(g.debt, g.assets);
+          const ltvCls = ltv > 70 ? 'bg-rose-50 text-rose-700' : ltv > 40 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600';
           return (
-            <div key={g.key}>
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <p className="text-sm font-bold text-slate-800">{g.label} <span className="text-xs font-medium text-slate-500">({g.sub})</span></p>
-                <p className="text-sm font-extrabold text-slate-900 tnum" title={vnd(g.assets)}>{compact(g.assets)}</p>
-              </div>
-              <div className="relative h-8 rounded-md bg-slate-50 mt-1.5 overflow-hidden">
-                {axis.ticks.slice(1, -1).map((t) => <span key={t} className="absolute inset-y-0 w-px bg-slate-200" style={{ left: (t / axis.max) * 100 + '%' }} />)}
-                {g.assets > 0 && (
-                  <div className="absolute inset-y-0 left-0 flex" style={{ width: (g.assets / axis.max) * 100 + '%' }}>
-                    <div className="h-full bg-blue-600" style={{ width: (equityShown / g.assets) * 100 + '%' }} title={`Vốn chủ sở hữu: ${vnd(g.equity)}`} />
-                    {debtShown > 0 && <div className="h-full" style={{ width: (debtShown / g.assets) * 100 + '%', background: g.debtColor }} title={`${g.debtLabel}: ${vnd(g.debt)}`} />}
+            <div key={g.key} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <span className="mt-1 h-2.5 w-2.5 rounded-full shrink-0" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{g.label}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{g.sub}</p>
                   </div>
-                )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-extrabold text-slate-900 tnum" title={vnd(g.assets)}>{compact(g.assets)}</p>
+                  <p className="text-[11px] text-slate-500 tnum">{pcv(share, 0)} tổng TS</p>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-slate-500 tnum">
-                <span>Vốn chủ <b className={g.equity < 0 ? 'text-rose-600' : 'text-blue-700'} title={vnd(g.equity)}>{compact(g.equity)}</b></span>
-                <label htmlFor={`debt-${g.key}`} className="inline-flex items-center gap-1.5">
-                  <span style={{ color: g.debtColor }} className="font-semibold">{g.debtLabel}</span>
-                  <NumInput id={`debt-${g.key}`} value={data.debts[g.key]} onChange={(v) => setDebt(g.key, v)} className="w-32 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-right font-bold tnum text-slate-800 outline-none focus:border-indigo-400 focus:bg-white" />
-                  <span>₫</span>
-                </label>
-                {g.debt > 0 && g.assets > 0 && <span>({pcv((g.debt / g.assets) * 100)} tài sản nhóm)</span>}
+              <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mt-2.5">
+                {g.assets > 0 && <div style={{ width: (eq / g.assets) * 100 + '%', background: GCOLORS[g.key] }} title={`Vốn chủ: ${vnd(g.equity)}`} />}
+                {g.assets > 0 && dShown > 0 && <div style={{ width: (dShown / g.assets) * 100 + '%', background: g.debtColor }} title={`${g.debtLabel}: ${vnd(g.debt)}`} />}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 text-xs text-slate-500 tnum">
+                <span>Vốn chủ <b className={g.equity < 0 ? 'text-rose-600' : 'text-slate-800'} title={vnd(g.equity)}>{compact(g.equity)}</b></span>
+                {g.debt > 0 && g.assets > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ltvCls}`}>Nợ / TS nhóm {pcv(ltv, 0)}</span>}
                 {g.debt > g.assets && <span className="font-semibold text-rose-600">Nợ vượt tài sản nhóm</span>}
               </div>
+              <label htmlFor={`debt-${g.key}`} className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-xs font-semibold" style={{ color: g.debtInk }}>{g.debtLabel}</span>
+                <span className="inline-flex items-center gap-1">
+                  <NumInput id={`debt-${g.key}`} value={data.debts[g.key]} onChange={(v) => setDebt(g.key, v)} className="w-36 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-right text-xs font-bold tnum text-slate-800 outline-none focus:border-indigo-400 focus:bg-white" />
+                  <span className="text-xs text-slate-500">₫</span>
+                </span>
+              </label>
             </div>
           );
         })}
       </div>
-      <div className="relative h-5 mt-3 text-[10px] text-slate-400 tnum" aria-hidden="true">
-        {axis.ticks.map((t, i) => (
-          <span key={t} className="absolute top-0 whitespace-nowrap" style={{ left: (t / axis.max) * 100 + '%', transform: i === 0 ? 'none' : i === axis.ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)' }}>{t === 0 ? '0' : compact(t)}</span>
-        ))}
+
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <RatioChip label="Nợ / Tài sản" value={pcv(debtPct, 0)} tone={debtTone} hint="Dưới 30% an toàn · 30-50% cần theo dõi · trên 50% rủi ro cao" />
+        <RatioChip label="Quỹ dự phòng" value={c.spent > 0 ? trim2(runway) + ' tháng' : '—'} tone={runTone} hint="(Tiền gửi + tiền mặt) / chi tiêu tháng. Chuẩn khuyến nghị 6 tháng." />
+        <RatioChip label="TS rủi ro" value={pcv(riskShare, 0)} tone="info" hint="Cổ phiếu / tổng tài sản" />
       </div>
     </Card>
   );
@@ -720,7 +903,18 @@ function AddModal({ tab, onSubmit, onClose }) {
   );
 }
 
-function Portfolio({ data, setData, c, live, setLive }) {
+const PH_TEXT = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none focus:border-indigo-400 focus:bg-white';
+const PH_NUM = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
+function PField({ id, label, children }) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5 truncate">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Portfolio({ data, setData, c, live, setLive, view }) {
   const [tabKey, setTabKey] = useState('stocks');
   const [adding, setAdding] = useState(false);
   const tab = TABS.find((t) => t.key === tabKey);
@@ -832,6 +1026,88 @@ function Portfolio({ data, setData, c, live, setLive }) {
     );
   }
 
+  const phone = view === 'phone';
+  const pAll = sum(rows, (r) => r.qty * (r.price - r.cost));
+  const cAll = sum(rows, (r) => r.qty * r.cost);
+  const interestAll = sum(rows, (r) => (r.principal * r.rate * r.term) / 1200);
+  const phoneCards = rows.map((r) => {
+    if (tabKey === 'stocks') {
+      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
+      return (
+        <article key={r.id} className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center gap-2">
+            <input id={`pc-stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${PH_TEXT} uppercase flex-1 min-w-0`} />
+            <div className="text-right shrink-0">
+              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
+              <p className="text-[10px] text-slate-500 tnum">{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)} nhóm CP</p>
+            </div>
+            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2.5">
+            <PField id={`pc-stk-${r.id}-qty`} label="Khối lượng"><NumInput id={`pc-stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-cost`} label="Giá vốn TB"><NumInput id={`pc-stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-price`} label={<>Giá hiện tại <span className={r.dir > 0 ? 'text-emerald-600' : 'text-rose-600'}>{r.dir > 0 ? '▲' : r.dir < 0 ? '▼' : ''}</span></>}><NumInput id={`pc-stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={PH_NUM} /></PField>
+          </div>
+          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
+        </article>
+      );
+    }
+    if (tabKey === 'gold') {
+      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
+      return (
+        <article key={r.id} className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center gap-2">
+            <input id={`pc-gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
+            <div className="text-right shrink-0">
+              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
+              <p className="text-[10px] text-slate-500 tnum">{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)} nhóm vàng</p>
+            </div>
+            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2.5">
+            <PField id={`pc-gld-${r.id}-qty`} label="Số lượng (chỉ)"><NumInput id={`pc-gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-cost`} label="Giá vốn / chỉ"><NumInput id={`pc-gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-price`} label="Giá hiện tại / chỉ"><NumInput id={`pc-gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={PH_NUM} /></PField>
+          </div>
+          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
+        </article>
+      );
+    }
+    const maturity = addMonths(parseISO(r.start), Math.round(r.term));
+    return (
+      <article key={r.id} className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="flex items-center gap-2">
+          <input id={`pc-sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
+          <div className="text-right shrink-0">
+            <p className="text-sm font-extrabold text-slate-900"><Money v={r.principal} /></p>
+            <p className="text-[10px] text-slate-500 tnum">{pcv(c.bankTotal > 0 ? (r.principal / c.bankTotal) * 100 : 0, 0)} nhóm gửi</p>
+          </div>
+          <IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-2.5">
+          <PField id={`pc-sav-${r.id}-pr`} label="Số tiền gốc"><NumInput id={`pc-sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-rate`} label="Lãi suất %/năm"><NumInput id={`pc-sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-term`} label="Kỳ hạn (tháng)"><NumInput id={`pc-sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-start`} label="Ngày gửi"><input id={`pc-sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${PH_TEXT} min-w-0`} /></PField>
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-100">
+          <div><p className="text-[10px] font-bold uppercase text-slate-400">Đáo hạn</p><p className="text-xs font-semibold tnum text-slate-800">{fmtDate(maturity)}</p><Countdown days={daysBetween(TODAY, maturity)} /></div>
+          <div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-400">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={(r.principal * r.rate * r.term) / 1200} /></p></div>
+        </div>
+      </article>
+    );
+  });
+  const phoneFoot = (
+    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex items-center justify-between gap-2">
+      <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng {tab.label}</p><p className="text-base font-extrabold tnum text-slate-900"><Money v={totalOf} /></p></div>
+      {tabKey !== 'savings'
+        ? <Pnl amount={pAll} p={cAll > 0 ? (pAll / cAll) * 100 : 0} />
+        : <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={interestAll} /></p></div>}
+    </div>
+  );
+
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-w-0" style={{ borderTop: `4px solid ${tab.color}` }}>
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pt-4 pb-2">
@@ -841,7 +1117,7 @@ function Portfolio({ data, setData, c, live, setLive }) {
             {TABS.map((t) => <TabButton key={t.key} color={t.color} active={t.key === tabKey} onClick={() => setTabKey(t.key)}>{t.label}</TabButton>)}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {tabKey === 'stocks' && (
             <>
               <label className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer select-none"><input id="live-price" type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="accent-indigo-600" />Tự chạy 4s</label>
@@ -857,9 +1133,18 @@ function Portfolio({ data, setData, c, live, setLive }) {
         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: tab.color + '22', color: tab.ink }}>{pcv(c.pct[tab.cls])} Tổng TS</span>
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${stCls}`}>{stText}</span>
       </div>
-      <div className="max-h-[420px] overflow-y-auto thin-scroll">
-        <TableLayout heads={heads} isEmpty={rows.length === 0} empty={`Chưa có dữ liệu ${tab.label.toLowerCase()}. Bấm “${tab.add}” để nhập.`} foot={foot}>{body}</TableLayout>
-      </div>
+      {phone ? (
+        <div className="px-3 pb-3 space-y-2.5">
+          {rows.length === 0 && <p className="text-xs text-slate-400 text-center py-8">Chưa có dữ liệu {tab.label.toLowerCase()}. Bấm “{tab.add}” để nhập.</p>}
+          {phoneCards}
+          {rows.length > 0 && phoneFoot}
+        </div>
+      ) : (
+        <div className="max-h-[420px] overflow-y-auto thin-scroll">
+          <TableLayout heads={heads} isEmpty={rows.length === 0} empty={`Chưa có dữ liệu ${tab.label.toLowerCase()}. Bấm “${tab.add}” để nhập.`} foot={foot}>{body}</TableLayout>
+        </div>
+      )}
+      <div className="px-4 sm:px-5 pb-4"><Insight items={portfolioInsights(tabKey, data, c)} title={`Nhận định ${tab.label.toLowerCase()}`} /></div>
       {adding && <AddModal tab={tab} onSubmit={addRow} onClose={() => setAdding(false)} />}
     </section>
   );
@@ -873,23 +1158,26 @@ function TopAssetsCard({ data, c }) {
     { name: 'Tiền mặt', type: 'Tiền mặt', value: data.cash, color: CLASSES[3].color },
     { name: 'Nợ phải đòi', type: 'Nợ phải đòi', value: data.receivable, color: CLASSES[4].color },
     { name: data.estateName || 'Bất động sản', type: 'Bất động sản', value: data.estate, color: CLASSES[5].color },
-  ].filter((a) => a.value > 0).sort((a, b) => b.value - a.value).slice(0, 6);
-  const max = items.length ? items[0].value : 1;
+  ].filter((a) => a.value > 0).sort((a, b) => b.value - a.value);
+  const shown = items.slice(0, 6);
+  const max = shown.length ? shown[0].value : 1;
   return (
     <Card title="Top tài sản lớn nhất" right={<span className="text-[11px] font-semibold text-slate-500 tnum">Tổng TS {compact(c.total)}</span>}>
       <div className="space-y-3.5">
-        {items.length === 0 && <p className="text-xs text-slate-400 text-center py-6">Chưa có tài sản. Nhập giá trị ở khối cơ cấu danh mục hoặc bảng nhập liệu.</p>}
-        {items.map((a, i) => (
+        {shown.length === 0 && <p className="text-xs text-slate-400 text-center py-6">Chưa có tài sản. Nhập giá trị ở khối cơ cấu danh mục hoặc bảng nhập liệu.</p>}
+        {shown.map((a, i) => (
           <ProgressRow key={a.name + i} title={a.name} sub={`${a.type} · ${pcv(c.total > 0 ? (a.value / c.total) * 100 : 0)} tổng TS`} valueText={compact(a.value)} valueTitle={vnd(a.value)} pct={(a.value / max) * 100} color={a.color}
             lead={<span className="h-6 w-6 shrink-0 rounded-full bg-slate-100 text-slate-600 text-[11px] font-extrabold grid place-items-center">{i + 1}</span>} />
         ))}
       </div>
+      <Insight items={topAssetInsights(items, c, data)} />
     </Card>
   );
 }
 
-function CategoryRow({ cat, budget, onChange, onDelete }) {
+function CategoryRow({ cat, budget, onChange, onDelete, view }) {
   const [open, setOpen] = useState(false);
+  const ph = view === 'phone';
   const total = catTotal(cat);
   const p = budget > 0 ? (total / budget) * 100 : 0;
   const over = p > 100;
@@ -901,27 +1189,30 @@ function CategoryRow({ cat, budget, onChange, onDelete }) {
   };
   const updItem = (id, patch) => onChange({ items: cat.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
   const delItem = (id) => { const items = cat.items.filter((i) => i.id !== id); onChange({ items, amount: items.length ? cat.amount : 0 }); };
+  const amt = cat.items.length > 0
+    ? <Money v={total} className="text-sm font-bold text-slate-900" />
+    : <div className={ph ? 'w-36' : 'w-28'}><NumInput id={`cat-${cat.id}-amt`} ariaLabel={`Tổng nhóm ${cat.name}`} value={cat.amount} onChange={(v) => onChange({ amount: v })} className={`${CELL} text-sm font-bold`} /></div>;
+  const pct = <span className={`w-10 text-right text-[11px] font-bold tnum ${over ? 'text-rose-600' : 'text-slate-500'}`}>{pcv(p, 0)}</span>;
   return (
     <div>
       <div className="flex items-center gap-1.5">
         <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: cat.color }} aria-hidden="true" />
         <input id={`cat-${cat.id}-name`} aria-label="Tên nhóm chi tiêu" value={cat.name} placeholder="Tên nhóm" onChange={(e) => onChange({ name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 text-sm font-semibold text-slate-800`} />
-        {cat.items.length > 0
-          ? <Money v={total} className="text-sm font-bold text-slate-900" />
-          : <div className="w-28"><NumInput id={`cat-${cat.id}-amt`} ariaLabel={`Tổng nhóm ${cat.name}`} value={cat.amount} onChange={(v) => onChange({ amount: v })} className={`${CELL} text-sm font-bold`} /></div>}
-        <span className={`w-10 text-right text-[11px] font-bold tnum ${over ? 'text-rose-600' : 'text-slate-500'}`}>{pcv(p, 0)}</span>
+        {!ph && amt}
+        {!ph && pct}
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? 'Thu gọn' : 'Mở chi tiết khoản chi'} className="p-1 rounded-md text-slate-400 hover:bg-slate-100">
           <span className="block transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}><Icon name="chevron" size={14} /></span>
         </button>
         <IconBtn tone="rose" icon="trash" label={`Xóa nhóm ${cat.name}`} onClick={onDelete} />
       </div>
+      {ph && <div className="ml-4 mt-1 flex items-center justify-between gap-2">{amt}{pct}</div>}
       <div className="ml-4 mt-1"><Bar pct={p} color={over ? '#e11d48' : cat.color} label={cat.name} /></div>
       {open && (
         <div className="ml-4 mt-2 space-y-1">
           {cat.items.map((it) => (
             <div key={it.id} className="flex items-center gap-1.5">
               <input id={`it-${it.id}-name`} aria-label="Tên khoản chi" value={it.name} placeholder="VD: Tiền điện" onChange={(e) => updItem(it.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 bg-slate-50`} />
-              <div className="w-28 shrink-0"><NumInput id={`it-${it.id}-amt`} ariaLabel={`Số tiền ${it.name}`} value={it.amount} onChange={(v) => updItem(it.id, { amount: v })} className={`${CELL} bg-slate-50`} /></div>
+              <div className={`${ph ? 'w-32' : 'w-28'} shrink-0`}><NumInput id={`it-${it.id}-amt`} ariaLabel={`Số tiền ${it.name}`} value={it.amount} onChange={(v) => updItem(it.id, { amount: v })} className={`${CELL} bg-slate-50`} /></div>
               <IconBtn tone="rose" icon="trash" label={`Xóa khoản ${it.name}`} onClick={() => delItem(it.id)} />
             </div>
           ))}
@@ -932,7 +1223,7 @@ function CategoryRow({ cat, budget, onChange, onDelete }) {
   );
 }
 
-function SpendingCard({ data, setData, c }) {
+function SpendingCard({ data, setData, c, view }) {
   const updCat = (id, patch) => setData((d) => ({ ...d, categories: d.categories.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const delCat = (id) => setData((d) => ({ ...d, categories: d.categories.filter((x) => x.id !== id) }));
   const addCat = () => setData((d) => ({ ...d, categories: [...d.categories, { id: uid(), name: '', color: CAT_COLORS[d.categories.length % CAT_COLORS.length], amount: 0, items: [] }] }));
@@ -951,10 +1242,11 @@ function SpendingCard({ data, setData, c }) {
       </div>
       <div className="space-y-3.5">
         {data.categories.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có nhóm chi tiêu. Bấm + để thêm.</p>}
-        {data.categories.map((cat) => <CategoryRow key={cat.id} cat={cat} budget={data.budget} onChange={(patch) => updCat(cat.id, patch)} onDelete={() => delCat(cat.id)} />)}
+        {data.categories.map((cat) => <CategoryRow key={cat.id} cat={cat} budget={data.budget} view={view} onChange={(patch) => updCat(cat.id, patch)} onDelete={() => delCat(cat.id)} />)}
         <ProgressRow title={left >= 0 ? 'Ngân sách còn lại' : 'Vượt ngân sách'} valueText={compact(Math.abs(left))} valueTitle={vnd(Math.abs(left))} pctText={pcv(data.budget > 0 ? (Math.abs(left) / data.budget) * 100 : 0, 0)} pct={data.budget > 0 ? (Math.abs(left) / data.budget) * 100 : 0} color={left >= 0 ? '#cbd5e1' : '#e11d48'} />
       </div>
       <p className="text-xs text-slate-500 mt-3 tnum">Đã chi <Money v={c.spent} className="font-bold text-rose-600" /> / <Money v={data.budget} className="font-bold text-slate-700" /></p>
+      <Insight items={spendingInsights(data, c)} />
     </Card>
   );
 }
@@ -1197,7 +1489,7 @@ function GoalsCard({ data, setData, c }) {
                   aria-label="Nguồn vốn"
                   value={g.source || 'bank'}
                   onChange={(e) => upd(g.id, { source: e.target.value })}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}
+                  className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}
                 >
                   {GOAL_SOURCES.map((s) => (
                     <option key={s.key} value={s.key}>Nguồn: {s.label}</option>
@@ -1208,7 +1500,7 @@ function GoalsCard({ data, setData, c }) {
                   aria-label="Mức độ ưu tiên"
                   value={g.priority || 2}
                   onChange={(e) => upd(g.id, { priority: Number(e.target.value) })}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}
+                  className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}
                 >
                   {PRIORITIES.map((pr) => (
                     <option key={pr.v} value={pr.v}>{pr.label}</option>
@@ -1263,13 +1555,13 @@ const VIEWS = [
   { k: 'phone', label: 'iPhone View', icon: 'phone' },
   { k: 'auto', label: 'Auto', icon: 'auto' },
 ];
-function ViewSwitcher({ view, setView }) {
+function ViewSwitcher({ view, setView, compact = false }) {
   return (
     <div role="group" aria-label="Chế độ xem" className="inline-flex p-1 rounded-xl bg-white border border-slate-200 shadow-sm">
       {VIEWS.map((v) => (
-        <button key={v.k} type="button" onClick={() => setView(v.k)} aria-pressed={view === v.k}
-          className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition whitespace-nowrap ${view === v.k ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
-          <Icon name={v.icon} size={14} />{v.label}
+        <button key={v.k} type="button" onClick={() => setView(v.k)} aria-pressed={view === v.k} aria-label={v.label} title={v.label}
+          className={`inline-flex items-center gap-1.5 text-xs font-bold ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded-lg transition whitespace-nowrap ${view === v.k ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
+          <Icon name={v.icon} size={14} />{!compact && v.label}
         </button>
       ))}
     </div>
@@ -1286,81 +1578,225 @@ function useClock() {
   return now;
 }
 
+function useNarrow() {
+  const q = '(max-width: 600px)';
+  const [m, setM] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(q).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(q);
+    const h = () => setM(mq.matches);
+    h();
+    if (mq.addEventListener) mq.addEventListener('change', h); else mq.addListener(h);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', h); else mq.removeListener(h); };
+  }, []);
+  return m;
+}
+
+function SyncBadge({ sync, onRetry }) {
+  const m = {
+    loading: { dot: 'bg-slate-400 animate-pulse', txt: 'Đang tải dữ liệu…', cls: 'text-slate-500' },
+    ready: { dot: 'bg-emerald-500', txt: 'Đã đồng bộ Supabase', cls: 'text-emerald-700' },
+    saving: { dot: 'bg-amber-400 animate-pulse', txt: 'Đang lưu…', cls: 'text-amber-700' },
+    error: { dot: 'bg-rose-500', txt: 'Lỗi đồng bộ, bấm để thử lại', cls: 'text-rose-700' },
+    offline: { dot: 'bg-slate-400', txt: 'Chỉ lưu trên máy này', cls: 'text-slate-500' },
+  }[sync];
+  const inner = (<><span className={`h-2 w-2 rounded-full shrink-0 ${m.dot}`} aria-hidden="true" /><span className="truncate">{m.txt}</span></>);
+  const cls = `inline-flex items-center gap-1.5 text-[11px] font-semibold min-w-0 ${m.cls}`;
+  return sync === 'error'
+    ? <button type="button" onClick={onRetry} className={cls}>{inner}</button>
+    : <span className={cls} role="status">{inner}</span>;
+}
+
+function StatusBar({ now }) {
+  const t = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  return (
+    <div className="shrink-0 h-11 flex items-end justify-between px-8 pb-1 text-[13px] font-bold text-slate-900 bg-white" aria-hidden="true">
+      <span className="tnum">{t}</span>
+      <span className="inline-flex h-2.5 w-[22px] rounded-[3px] border border-slate-900 p-px"><span className="block h-full w-4/5 rounded-[1px] bg-slate-900" /></span>
+    </div>
+  );
+}
+
+const PTABS = [
+  { k: 'overview', label: 'Tổng quan', icon: 'home' },
+  { k: 'portfolio', label: 'Danh mục', icon: 'pie' },
+  { k: 'cash', label: 'Chi tiêu', icon: 'wallet' },
+  { k: 'goals', label: 'Mục tiêu', icon: 'target' },
+];
+const PTITLES = { overview: 'Tổng quan gia sản', portfolio: 'Danh mục đầu tư', cash: 'Chi tiêu & tài sản', goals: 'Mục tiêu tài chính' };
+
 function App() {
   const [view, setView] = useState(loadView);
   const [data, setDataState] = useState(loadLocalData);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [sync, setSync] = useState(window.supabaseClient ? 'loading' : 'offline');
   const [live, setLive] = useState(false);
+  const [tab, setTab] = useState('overview');
   const now = useClock();
+  const narrow = useNarrow();
+  const client = window.supabaseClient;
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const lastSaved = useRef('');
+  const saveTimer = useRef(null);
+  const scrollRef = useRef(null);
+
+  const eff = view === 'auto' ? (narrow ? 'phone' : 'auto') : view;
+  const isPhone = eff === 'phone';
+  const framed = isPhone && !narrow;
 
   // ĐỌC DỮ LIỆU TỪ SUPABASE
-  useEffect(() => {
-    async function initData() {
-      try {
-        const { data: row, error } = await window.supabaseClient
-          .from('wealthos_data')
-          .select('json_data')
-          .eq('id', 1)
-          .single();
-
-        if (error) throw error;
-        if (row && row.json_data) {
-          setDataState(normalizeData(row.json_data));
-        }
-      } catch (e) {
-        console.error('Lỗi tải dữ liệu Supabase:', e);
-      } finally {
-        setLoading(false);
+  const loadRemote = useCallback(async () => {
+    if (!client) return;
+    try {
+      const { data: row, error } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
+      if (error) throw error;
+      if (row && row.json_data) {
+        const next = normalizeData(row.json_data);
+        lastSaved.current = JSON.stringify(next);
+        setDataState(next);
       }
+      setLoaded(true);
+      setSync('ready');
+    } catch (e) {
+      console.error('Lỗi tải dữ liệu Supabase:', e);
+      setSync('error');
     }
-    initData();
-  }, []);
+  }, [client]);
 
-  const setData = useCallback((fn) => {
-    setDataState((prev) => fn(prev));
-  }, []);
+  // GHI LÊN SUPABASE (chỉ khi đã đọc thành công, tránh ghi đè dữ liệu thật bằng dữ liệu mặc định)
+  const flush = useCallback(async () => {
+    if (!client || !loaded) return;
+    const payload = dataRef.current;
+    const str = JSON.stringify(payload);
+    if (str === lastSaved.current) return;
+    clearTimeout(saveTimer.current);
+    setSync('saving');
+    try {
+      const { error } = await client.from('wealthos_data').upsert({ id: 1, json_data: payload });
+      if (error) throw error;
+      lastSaved.current = str;
+      setSync('ready');
+    } catch (err) {
+      console.error('Lỗi lưu Supabase:', err);
+      setSync('error');
+    }
+  }, [client, loaded]);
 
+  useEffect(() => { loadRemote(); }, [loadRemote]);
+  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { return; } }, [data]);
+  useEffect(() => {
+    if (!loaded || !client) return undefined;
+    if (JSON.stringify(data) === lastSaved.current) return undefined;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(flush, 1200);
+    return () => clearTimeout(saveTimer.current);
+  }, [data, loaded, client, flush]);
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') { flush(); return; }
+      if (!loaded || JSON.stringify(dataRef.current) === lastSaved.current) loadRemote();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [flush, loadRemote, loaded]);
+  const retry = () => { if (loaded) flush(); else loadRemote(); };
+
+  const setData = useCallback((fn) => { setDataState((prev) => fn(prev)); }, []);
   const c = useMemo(() => compute(data), [data]);
 
-  // TỰ ĐỘNG LƯU SUPABASE VỚI DEBOUNCE
-  const saveTimeout = useRef(null);
-  useEffect(() => {
-    if (loading || !data) return;
-
-    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
-
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(async () => {
-      try {
-        await window.supabaseClient
-          .from('wealthos_data')
-          .upsert({ id: 1, json_data: data });
-      } catch (err) {
-        console.error('Lỗi lưu Supabase:', err);
-      }
-    }, 1200);
-  }, [data, loading]);
-
   useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) { return; } }, [view]);
-
   useEffect(() => {
     if (!live) return undefined;
-    const t = setInterval(() => {
-      setDataState((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) }));
-    }, 4000);
+    const t = setInterval(() => { setDataState((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) })); }, 4000);
     return () => clearInterval(t);
   }, [live]);
+  useEffect(() => {
+    if (!isPhone) return undefined;
+    document.documentElement.classList.add('lock');
+    document.body.classList.add('lock');
+    return () => { document.documentElement.classList.remove('lock'); document.body.classList.remove('lock'); };
+  }, [isPhone]);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab, isPhone]);
 
   const clock = [now.getHours(), now.getMinutes(), now.getSeconds()].map((x) => String(x).padStart(2, '0')).join(':');
-  const outer = V(view, 'w-full overflow-x-hidden', 'w-full overflow-x-auto thin-scroll', 'w-full overflow-x-hidden');
-  const frame = V(view, 'max-w-[428px] mx-auto overflow-x-hidden bg-slate-50 sm:border sm:border-slate-300 sm:rounded-[28px] sm:shadow-lg p-3', 'min-w-[1200px] p-4', 'max-w-[1600px] mx-auto p-3 sm:p-4 overflow-x-hidden');
-  const root = `grid gap-4 ${V(view, 'grid-cols-1', 'grid-cols-12', 'grid-cols-1 lg:grid-cols-12')}`;
-  const tier = V(view, '', 'col-span-12', 'lg:col-span-12');
-  const kpiGrid = V(view, 'grid-cols-2', 'grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]', 'grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]');
-  const netSpan = V(view, 'col-span-2', '', 'col-span-2 lg:col-span-1');
-  const midGrid = V(view, 'grid-cols-1', 'grid-cols-[35fr_65fr]', 'grid-cols-1 lg:grid-cols-[35fr_65fr]');
-  const botGrid = V(view, 'grid-cols-1', 'grid-cols-3', 'grid-cols-1 lg:grid-cols-3');
-  const head = V(view, 'flex-col', 'flex-row items-end', 'flex-col lg:flex-row lg:items-end');
+  const outer = V(eff, 'w-full', 'w-full overflow-x-auto thin-scroll', 'w-full overflow-x-hidden');
+  const frame = V(eff, '', 'min-w-[1200px] p-4', 'max-w-[1600px] mx-auto p-3 sm:p-4 overflow-x-hidden');
+  const root = `grid gap-4 ${V(eff, 'grid-cols-1', 'grid-cols-12', 'grid-cols-1 lg:grid-cols-12')}`;
+  const tier = V(eff, '', 'col-span-12', 'lg:col-span-12');
+  const kpiGrid = V(eff, 'grid-cols-2', 'grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]', 'grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]');
+  const netSpan = V(eff, 'col-span-2', '', 'col-span-2 lg:col-span-1');
+  const midGrid = V(eff, 'grid-cols-1', 'grid-cols-[35fr_65fr]', 'grid-cols-1 lg:grid-cols-[35fr_65fr]');
+  const botGrid = V(eff, 'grid-cols-1', 'grid-cols-3', 'grid-cols-1 lg:grid-cols-3');
+  const head = V(eff, 'flex-col', 'flex-row items-end', 'flex-col lg:flex-row lg:items-end');
+
+  const kpiBlock = (
+    <div className={`${tier} grid gap-3 ${kpiGrid}`}>
+      <Kpi small={isPhone} dark className={netSpan} label="Tổng tài sản ròng" sub={vnd(c.net)}><span title={vnd(c.net)}>{big(c.net)}</span></Kpi>
+      <Kpi small={isPhone} label="Tổng tài sản" sub={vnd(c.total)}><span title={vnd(c.total)}>{big(c.total)}</span></Kpi>
+      <Kpi small={isPhone} label="Tổng nợ" sub={`Chiếm ${pcv(c.total > 0 ? (c.debt / c.total) * 100 : 0)} tổng tài sản`} bar={c.total > 0 ? (c.debt / c.total) * 100 : 0} barColor="#f97316"><span className="text-orange-600" title={vnd(c.debt)}>{big(c.debt)}</span></Kpi>
+      <Kpi small={isPhone} className={isPhone ? 'col-span-2' : ''} label="Dòng tiền thặng dư (tháng)" sub={`Thu ${compact(data.income)} − chi ${compact(c.spent)} · tiết kiệm ${pcv(data.income > 0 ? (c.surplus / data.income) * 100 : 0)}`}>
+        <span className={c.surplus >= 0 ? 'text-emerald-600' : 'text-rose-600'} title={vnd(c.surplus)}>{c.surplus >= 0 ? '+ ' : '− '}{fixed2(Math.abs(c.surplus) / 1e6)} triệu</span>
+      </Kpi>
+      <Kpi small={isPhone} className={isPhone ? 'col-span-2' : ''} label="Mức độ tự do tài chính (FIRE)" sub={data.fireTarget > 0 ? `Mục tiêu FIRE ${compact(c.fireTarget)}` : `Tự động: 25 × chi tiêu năm = ${compact(c.fireTarget)}`} bar={c.firePct} barColor="#4f46e5"
+        extra={
+          <div className="flex items-center gap-1.5 mt-2">
+            <label htmlFor="fire-target" className="text-[10px] font-bold text-slate-500 shrink-0">Mục tiêu FIRE</label>
+            <NumInput id="fire-target" blankZero value={data.fireTarget} placeholder="Tự động" onChange={(v) => setData((d) => ({ ...d, fireTarget: v }))} className="w-full min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white" />
+          </div>
+        }>
+        <span className="text-indigo-700">{pcv(c.firePct, c.firePct < 10 ? 1 : 0)} <span className="text-sm font-bold text-slate-500">mục tiêu</span></span>
+      </Kpi>
+    </div>
+  );
+  const allocation = <AllocationCard data={data} setData={setData} c={c} view={eff} />;
+  const balance = <BalanceCard data={data} setData={setData} c={c} />;
+  const portfolio = <Portfolio data={data} setData={setData} c={c} live={live} setLive={setLive} view={eff} />;
+  const topAssets = <TopAssetsCard data={data} c={c} />;
+  const spending = <SpendingCard data={data} setData={setData} c={c} view={eff} />;
+  const goals = <GoalsCard data={data} setData={setData} c={c} />;
+
+  if (isPhone) {
+    const shell = (
+      <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+        {framed && <StatusBar now={now} />}
+        <header className="shrink-0 bg-white border-b border-slate-200 px-4 pb-2.5 flex items-center justify-between gap-2" style={{ paddingTop: framed ? 4 : 'max(10px, env(safe-area-inset-top, 0px))' }}>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold tracking-widest text-indigo-600">WEALTHOS PRO</p>
+            <h1 className="text-[15px] leading-tight font-extrabold text-slate-900 truncate">{PTITLES[tab]}</h1>
+            <SyncBadge sync={sync} onRetry={retry} />
+          </div>
+          <ViewSwitcher view={view} setView={setView} compact />
+        </header>
+        <main ref={scrollRef} className="app-scroll flex-1 min-h-0 px-3 py-3">
+          {tab === 'overview' && <div className="space-y-3">{kpiBlock}{allocation}{balance}</div>}
+          {tab === 'portfolio' && <div className="space-y-3">{portfolio}</div>}
+          {tab === 'cash' && <div className="space-y-3">{spending}{topAssets}</div>}
+          {tab === 'goals' && <div className="space-y-3">{goals}</div>}
+          <div className="h-2" />
+        </main>
+        <nav aria-label="Điều hướng" className="shrink-0 grid grid-cols-4 bg-white border-t border-slate-200" style={{ paddingBottom: framed ? 10 : 'max(6px, env(safe-area-inset-bottom, 0px))' }}>
+          {PTABS.map((t) => (
+            <button key={t.k} type="button" onClick={() => setTab(t.k)} aria-current={tab === t.k ? 'page' : undefined}
+              className={`flex flex-col items-center gap-0.5 pt-2 pb-1 text-[10px] font-bold ${tab === t.k ? 'text-indigo-600' : 'text-slate-400'}`}>
+              <Icon name={t.icon} size={20} />{t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+    );
+    if (!framed) return <div className="fixed inset-0 w-full">{shell}</div>;
+    return (
+      <div className="min-h-screen w-full grid place-items-center bg-slate-200 p-4 overflow-hidden">
+        <div className="relative rounded-[56px] bg-slate-900 p-[10px] shadow-2xl" style={{ width: 410 }}>
+          <div className="relative overflow-hidden rounded-[46px] bg-white" style={{ height: 'min(830px, calc(100dvh - 56px))', transform: 'translateZ(0)' }}>
+            <div className="absolute left-1/2 top-2 z-40 h-[26px] w-[92px] -translate-x-1/2 rounded-full bg-black" aria-hidden="true" />
+            {shell}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-2 sm:p-4 overflow-x-hidden">
@@ -1371,9 +1807,9 @@ function App() {
               <div className="min-w-0">
                 <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-indigo-600"><Icon name="layers" size={14} />WEALTHOS PRO · QUẢN LÝ GIA SẢN &amp; TỰ DO TÀI CHÍNH</p>
                 <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-1">BÁO CÁO TỔNG QUAN GIA SẢN</h1>
-                <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-1.5">
-                  <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" /></span>
-                  {loading ? 'Đang đồng bộ Supabase...' : 'Đã đồng bộ Supabase Cloud'} | VNĐ · <span className="tnum">{clock}</span>
+                <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <SyncBadge sync={sync} onRetry={retry} />
+                  <span>VNĐ · <span className="tnum">{clock}</span></span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1381,35 +1817,19 @@ function App() {
               </div>
             </header>
 
-            <div className={`${tier} grid gap-3 ${kpiGrid}`}>
-              <Kpi dark className={netSpan} label="Tổng tài sản ròng" sub={vnd(c.net)}><span title={vnd(c.net)}>{big(c.net)}</span></Kpi>
-              <Kpi label="Tổng tài sản" sub={vnd(c.total)}><span title={vnd(c.total)}>{big(c.total)}</span></Kpi>
-              <Kpi label="Tổng nợ" sub={`Chiếm ${pcv(c.total > 0 ? (c.debt / c.total) * 100 : 0)} tổng tài sản`} bar={c.total > 0 ? (c.debt / c.total) * 100 : 0} barColor="#f97316"><span className="text-orange-600" title={vnd(c.debt)}>{big(c.debt)}</span></Kpi>
-              <Kpi label="Dòng tiền thặng dư (tháng)" sub={`Thu ${compact(data.income)} − chi ${compact(c.spent)} · tiết kiệm ${pcv(data.income > 0 ? (c.surplus / data.income) * 100 : 0)}`}>
-                <span className={c.surplus >= 0 ? 'text-emerald-600' : 'text-rose-600'} title={vnd(c.surplus)}>{c.surplus >= 0 ? '+ ' : '− '}{fixed2(Math.abs(c.surplus) / 1e6)} triệu</span>
-              </Kpi>
-              <Kpi label="Mức độ tự do tài chính (FIRE)" sub={data.fireTarget > 0 ? `Mục tiêu FIRE ${compact(c.fireTarget)}` : `Tự động: 25 × chi tiêu năm = ${compact(c.fireTarget)}`} bar={c.firePct} barColor="#4f46e5"
-                extra={
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <label htmlFor="fire-target" className="text-[10px] font-bold text-slate-500 shrink-0">Mục tiêu FIRE</label>
-                    <NumInput id="fire-target" blankZero value={data.fireTarget} placeholder="Tự động" onChange={(v) => setData((d) => ({ ...d, fireTarget: v }))} className="w-full min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white" />
-                  </div>
-                }>
-                <span className="text-indigo-700">{pcv(c.firePct, c.firePct < 10 ? 1 : 0)} <span className="text-sm font-bold text-slate-500">mục tiêu</span></span>
-              </Kpi>
-            </div>
+            {kpiBlock}
 
             <div className={`${tier} grid gap-4 items-start ${midGrid}`}>
-              <AllocationCard data={data} setData={setData} c={c} view={view} />
-              <StackedCard data={data} setData={setData} c={c} />
+              {allocation}
+              {balance}
             </div>
 
-            <div className={tier}><Portfolio data={data} setData={setData} c={c} live={live} setLive={setLive} /></div>
+            <div className={tier}>{portfolio}</div>
 
             <div className={`${tier} grid gap-4 items-start ${botGrid}`}>
-              <TopAssetsCard data={data} c={c} />
-              <SpendingCard data={data} setData={setData} c={c} />
-              <GoalsCard data={data} setData={setData} c={c} />
+              {topAssets}
+              {spending}
+              {goals}
             </div>
           </div>
         </div>
