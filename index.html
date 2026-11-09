@@ -2615,37 +2615,114 @@ function App() {
     setHistory(snap);
   }, [authStatus, historyScope, c.total, c.debt, c.net]);
 
-  const flush = useCallback(async () => {
-    if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
-    const str = JSON.stringify(regRef.current);
-    const v3_vault = CryptoJS.AES.encrypt(str, CLOUD_SECRET).toString();
-    try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
 
-    if (!client || str === lastSaved.current) return;
-    clearTimeout(saveTimer.current);
+
+
+
+
+
+
+
+
+
+
+const flush = useCallback(async () => {
+    if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
+    if (!client) return;
+
+    const myEmail = currentUserEmail;
+    const myUserObj = regRef.current.users[myEmail];
+    if (!myUserObj) return;
+
     setSync('saving');
     try {
-      const { error } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
-      if (error) throw error;
-      lastSaved.current = str;
+      // BƯỚC 1: KÉO DỮ LIỆU MỚI NHẤT TỪ MÂY VỀ (Chống ghi đè Race Condition)
+      const { data: row, error: fetchErr } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
+      if (fetchErr) throw fetchErr;
+
+      let latestReg = regRef.current;
+      if (row && row.json_data && row.json_data.v3_vault) {
+        const bytes = CryptoJS.AES.decrypt(row.json_data.v3_vault, CLOUD_SECRET);
+        const str = bytes.toString(CryptoJS.enc.Utf8);
+        if (str) {
+          const cloudReg = JSON.parse(str);
+          // THUẬT TOÁN MERGE: Gắn data mới của TÔI vào bản Cloud, giữ nguyên data của VỢ
+          latestReg = {
+            ...cloudReg,
+            users: {
+              ...cloudReg.users,
+              [myEmail]: myUserObj 
+            }
+          };
+        }
+      }
+
+      const strToSave = JSON.stringify(latestReg);
+      if (strToSave === lastSaved.current) {
+        setSync('ready');
+        return; // Không có gì đổi, hủy lệnh lưu
+      }
+
+      // BƯỚC 2: MÃ HÓA BẢN MERGE VÀ PUSH LÊN MÂY
+      const v3_vault = CryptoJS.AES.encrypt(strToSave, CLOUD_SECRET).toString();
+      const { error: upsertErr } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
+      if (upsertErr) throw upsertErr;
+
+      lastSaved.current = strToSave;
+      try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
+
+      // Đồng bộ lại UI nếu phát hiện vợ vừa thêm khoản mới
+      setRegistry(latestReg);
       setSync('ready');
     } catch (err) {
       console.error('Lỗi lưu Supabase:', err);
       setSync('error');
     }
-  }, [authStatus, client]);
+  }, [authStatus, client, currentUserEmail]);
 
+  // BƯỚC 3: TỐI ƯU DEBOUNCE (Chờ 3 giây ngưng gõ phím mới mã hóa để chống lag)
   useEffect(() => {
     if (authStatus !== 'authenticated' || !Object.keys(registry.users || {}).length) return undefined;
     const str = JSON.stringify(registry);
-    const v3_vault = CryptoJS.AES.encrypt(str, CLOUD_SECRET).toString();
-    try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ v3_vault: CryptoJS.AES.encrypt(str, CLOUD_SECRET).toString() })); } catch (e) {}
+    
     if (!client || str === lastSaved.current) return undefined;
+    
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(flush, 1000);
+    saveTimer.current = setTimeout(flush, 3000); 
     return () => clearTimeout(saveTimer.current);
   }, [registry, authStatus, client, flush]);
 
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
   const retry = () => {
     if (authStatus === 'authenticated') flush();
     else loadRemote();
