@@ -344,13 +344,6 @@ function compute(d) {
   };
 }
 
-function simulatePrice(r) {
-  if (!(r.price > 0)) return r;
-  const move = (0.01 + Math.random() * 0.02) * (Math.random() < 0.5 ? -1 : 1);
-  const next = Math.max(10, Math.round((r.price * (1 + move)) / 10) * 10);
-  return { ...r, price: next, dir: next >= r.price ? 1 : -1 };
-}
-
 /* ══════════════════════════════════════════════════
    NET WORTH HISTORY
    ══════════════════════════════════════════════════ */
@@ -527,7 +520,6 @@ const ICONS = {
   plus: 'M12 5v14M5 12h14',
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
   chevron: 'm6 9 6 6 6-6',
-  refresh: 'M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5',
   check: 'm5 12 5 5L20 7',
   x: 'M6 6l12 12M18 6 6 18',
   up: 'M12 19V5M5 12l7-7 7 7',
@@ -953,186 +945,7 @@ function portfolioInsights(tabKey, data, c) {
   return out;
 }
 
-/* ---------- Bảng cân đối tài sản & nợ ---------- */
-const GCOLORS = { risk: '#2563eb', safe: '#0d9488', fixed: '#7c3aed' };
-function Tile({ label, value, color, sub }) {
-  return (
-    <div className="rounded-xl bg-slate-50 border border-slate-100 px-2.5 py-2 min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 truncate">{label}</p>
-      <p className={`text-base font-extrabold tnum mt-0.5 truncate ${color}`} title={vnd(value)}>{compact(value)}</p>
-      {sub && <p className="text-[10px] text-slate-500 tnum truncate">{sub}</p>}
-    </div>
-  );
-}
-function RatioChip({ label, value, tone, hint }) {
-  const cls = { good: 'bg-emerald-50 text-emerald-700 border-emerald-100', warn: 'bg-amber-50 text-amber-700 border-amber-100', bad: 'bg-rose-50 text-rose-700 border-rose-100', info: 'bg-slate-50 text-slate-700 border-slate-200' }[tone];
-  return (
-    <div className={`rounded-xl border px-2.5 py-2 min-w-0 ${cls}`} title={hint}>
-      <p className="text-[10px] font-bold uppercase tracking-wide opacity-80 truncate">{label}</p>
-      <p className="text-sm font-extrabold tnum mt-0.5 truncate">{value}</p>
-    </div>
-  );
-}
-
-const BalanceCard = memo(function BalanceCard({ data, setData, c }) {
-  const setDebt = (k, v) => setData((d) => ({ ...d, debts: { ...d.debts, [k]: v } }));
-  const debtPct = c.total > 0 ? Math.min(100, (c.debt / c.total) * 100) : 0;
-  const equityPct = c.total > 0 ? 100 - debtPct : 0;
-  const runway = c.spent > 0 ? (c.bankTotal + data.cash) / c.spent : 0;
-  const riskShare = c.total > 0 ? (c.groups[0].assets / c.total) * 100 : 0;
-  const debtTone = debtPct <= 30 ? 'good' : debtPct <= 50 ? 'warn' : 'bad';
-  const runTone = c.spent <= 0 ? 'info' : runway >= 6 ? 'good' : runway >= 3 ? 'warn' : 'bad';
-  const levTone = { good: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-rose-50 text-rose-700' }[debtTone];
-  return (
-    <Card title="Bảng cân đối tài sản & nợ" right={<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${levTone}`}>ĐÒN BẨY {pcv(debtPct, 0)}</span>}>
-      <div className="grid grid-cols-3 gap-2">
-        <Tile label="Tổng tài sản" value={c.total} color="text-slate-900" />
-        <Tile label="Tổng nợ" value={c.debt} color="text-orange-600" />
-        <Tile label="Vốn chủ sở hữu" value={c.net} color={c.net < 0 ? 'text-rose-600' : 'text-blue-700'} sub={`${pcv(equityPct, 0)} tài sản`} />
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600 mb-1">
-          <span>Cơ cấu nguồn vốn</span>
-          <span className="tnum">Vốn chủ {pcv(equityPct, 0)} · Nợ {pcv(debtPct, 0)}</span>
-        </div>
-        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100" role="img" aria-label={`Vốn chủ ${pcv(equityPct, 0)}, nợ ${pcv(debtPct, 0)}`}>
-          {c.total > 0 && <div style={{ width: equityPct + '%', background: '#2563eb' }} title={`Vốn chủ: ${vnd(c.net)}`} />}
-          {c.total > 0 && debtPct > 0 && <div style={{ width: debtPct + '%', background: '#f97316' }} title={`Nợ: ${vnd(c.debt)}`} />}
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="text-[11px] font-semibold text-slate-600 mb-1">Cơ cấu tài sản theo thanh khoản</div>
-        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-px" role="img" aria-label="Cơ cấu tài sản theo nhóm thanh khoản">
-          {c.groups.map((g) => g.assets > 0 && c.total > 0 ? <div key={g.key} style={{ width: (g.assets / c.total) * 100 + '%', background: GCOLORS[g.key] }} title={`${g.label}: ${vnd(g.assets)}`} /> : null)}
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-slate-600">
-          {c.groups.map((g) => (
-            <span key={g.key} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />{g.label.replace('Tài sản ', '')} <b className="tnum text-slate-800">{pcv(c.total > 0 ? (g.assets / c.total) * 100 : 0, 0)}</b></span>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-2.5">
-        {c.groups.map((g) => {
-          const share = c.total > 0 ? (g.assets / c.total) * 100 : 0, ltv = g.assets > 0 ? (g.debt / g.assets) * 100 : 0;
-          const eq = Math.max(0, g.equity), dShown = Math.min(g.debt, g.assets);
-          const ltvCls = ltv > 70 ? 'bg-rose-50 text-rose-700' : ltv > 40 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600';
-          return (
-            <div key={g.key} className="rounded-xl border border-slate-200 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full shrink-0" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-800 truncate">{g.label}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{g.sub}</p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-extrabold text-slate-900 tnum" title={vnd(g.assets)}>{compact(g.assets)}</p>
-                  <p className="text-[11px] text-slate-500 tnum">{pcv(share, 0)} tổng TS</p>
-                </div>
-              </div>
-              <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mt-2.5">
-                {g.assets > 0 && <div style={{ width: (eq / g.assets) * 100 + '%', background: GCOLORS[g.key] }} title={`Vốn chủ: ${vnd(g.equity)}`} />}
-                {g.assets > 0 && dShown > 0 && <div style={{ width: (dShown / g.assets) * 100 + '%', background: g.debtColor }} title={`${g.debtLabel}: ${vnd(g.debt)}`} />}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 text-xs text-slate-500 tnum">
-                <span>Vốn chủ <b className={g.equity < 0 ? 'text-rose-600' : 'text-slate-800'} title={vnd(g.equity)}>{compact(g.equity)}</b></span>
-                {g.debt > 0 && g.assets > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ltvCls}`}>Nợ / TS nhóm {pcv(ltv, 0)}</span>}
-                {g.debt > g.assets && <span className="font-semibold text-rose-600">Nợ vượt tài sản nhóm</span>}
-              </div>
-              <label htmlFor={`debt-${g.key}`} className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-xs font-semibold" style={{ color: g.debtInk }}>{g.debtLabel}</span>
-                <span className="inline-flex items-center gap-1">
-                  <NumInput id={`debt-${g.key}`} value={data.debts[g.key]} onChange={(v) => setDebt(g.key, v)} className="w-36 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-right text-xs font-bold tnum text-slate-800 outline-none focus:border-indigo-400 focus:bg-white" />
-                  <span className="text-xs text-slate-500">₫</span>
-                </span>
-              </label>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 mt-4">
-        <RatioChip label="Nợ / Tài sản" value={pcv(debtPct, 0)} tone={debtTone} hint="Dưới 30% an toàn · 30-50% cần theo dõi · trên 50% rủi ro cao" />
-        <RatioChip label="Quỹ dự phòng" value={c.spent > 0 ? trim2(runway) + ' tháng' : '—'} tone={runTone} hint="(Tiền gửi + tiền mặt) / chi tiêu tháng. Chuẩn khuyến nghị 6 tháng." />
-        <RatioChip label="TS rủi ro" value={pcv(riskShare, 0)} tone="info" hint="Cổ phiếu / tổng tài sản" />
-      </div>
-    </Card>
-  );
-});
-
-/* ---------- Nhập liệu danh mục đầu tư ---------- */
-const TABS = [
-  { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã cổ phiếu' },
-  { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm loại vàng' },
-  { key: 'savings', label: 'Sổ Tiết Kiệm', color: '#0d9488', ink: '#0f766e', cls: 'bank', add: 'Thêm sổ tiết kiệm' },
-];
-const FIELDS = {
-  stocks: [
-    { k: 'code', l: 'Mã cổ phiếu', kind: 'text', ph: 'VD: FPT', def: '' }, { k: 'qty', l: 'Khối lượng', kind: 'int', def: 0 },
-    { k: 'cost', l: 'Giá vốn trung bình (₫)', kind: 'int', def: 0 }, { k: 'price', l: 'Giá hiện tại (₫)', kind: 'int', def: 0 },
-    { k: 'target', l: '% Target trong nhóm CP', kind: 'dec', def: 0 },
-  ],
-  gold: [
-    { k: 'type', l: 'Loại vàng', kind: 'text', ph: 'VD: SJC, Nhẫn 9999', def: '' }, { k: 'qty', l: 'Số lượng (chỉ)', kind: 'dec', def: 0 },
-    { k: 'cost', l: 'Giá vốn / chỉ (₫)', kind: 'int', def: 0 }, { k: 'price', l: 'Giá hiện tại / chỉ (₫)', kind: 'int', def: 0 },
-    { k: 'target', l: '% Target trong nhóm vàng', kind: 'dec', def: 0 },
-  ],
-  savings: [
-    { k: 'bank', l: 'Ngân hàng (nơi gửi)', kind: 'text', ph: 'VD: ACB', def: '' }, { k: 'principal', l: 'Số tiền gốc (₫)', kind: 'int', def: 0 },
-    { k: 'rate', l: 'Lãi suất (%/năm)', kind: 'dec', def: 0 }, { k: 'term', l: 'Kỳ hạn (tháng)', kind: 'int', def: 6 },
-    { k: 'start', l: 'Ngày gửi', kind: 'date', def: toISO(TODAY) },
-  ],
-};
-const OVERLAY_PAD = 'max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))';
-
-function AddModal({ tab, onSubmit, onClose }) {
-  const cfg = FIELDS[tab.key];
-  const [f, setF] = useState(() => Object.fromEntries(cfg.map((x) => [x.k, x.def])));
-  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const submit = (e) => { e.preventDefault(); onSubmit(f); };
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 grid place-items-center" style={{ padding: OVERLAY_PAD }} role="dialog" aria-modal="true" aria-label={tab.add}>
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-full overflow-y-auto" style={{ borderTop: `4px solid ${tab.color}` }}>
-        <div className="flex items-center justify-between px-5 py-3">
-          <h2 className="font-bold text-slate-900">{tab.add}</h2>
-          <button type="button" onClick={onClose} aria-label="Đóng" className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"><Icon name="x" /></button>
-        </div>
-        <div className="px-5 pb-2 grid sm:grid-cols-2 gap-3">
-          {cfg.map((x, i) => (
-            <div key={x.k} className={x.k === 'code' || x.k === 'type' || x.k === 'bank' ? 'sm:col-span-2' : ''}>
-              <label htmlFor={`add-${x.k}`} className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">{x.l}</label>
-              {x.kind === 'text' && <input id={`add-${x.k}`} autoFocus={i === 0} value={f[x.k]} placeholder={x.ph} onChange={(e) => set(x.k, e.target.value)} className={FIELD} />}
-              {x.kind === 'int' && <NumInput id={`add-${x.k}`} value={f[x.k]} onChange={(v) => set(x.k, v)} className={`${FIELD} text-right tnum`} />}
-              {x.kind === 'dec' && <NumInput id={`add-${x.k}`} decimal value={f[x.k]} onChange={(v) => set(x.k, v)} className={`${FIELD} text-right tnum`} />}
-              {x.kind === 'date' && <input id={`add-${x.k}`} type="date" value={f[x.k]} onChange={(e) => set(x.k, e.target.value || toISO(TODAY))} className={FIELD} />}
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-4">
-          <button type="button" onClick={onClose} className="text-xs font-bold px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">Hủy</button>
-          <button type="submit" className="text-xs font-bold px-4 py-2 rounded-xl text-white hover:opacity-90" style={{ background: tab.color }}>Thêm vào danh mục</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-const PH_TEXT = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none focus:border-indigo-400 focus:bg-white';
-const PH_NUM = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
-function PField({ id, label, children }) {
-  return (
-    <div className="min-w-0">
-      <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5 truncate">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-const Portfolio = memo(function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
+const Portfolio = memo(function Portfolio({ data, setData, c, view, isCombined }) {
   const [tabKey, setTabKey] = useState('stocks');
   const [adding, setAdding] = useState(false);
   const tab = TABS.find((t) => t.key === tabKey);
@@ -1146,7 +959,6 @@ const Portfolio = memo(function Portfolio({ data, setData, c, live, setLive, vie
     setData((d) => ({ ...d, [tabKey]: [...d[tabKey], row] }));
     setAdding(false);
   };
-  const tickPrices = () => setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) }));
   const totalOf = { stocks: c.stockTotal, gold: c.goldTotal, savings: c.bankTotal }[tabKey];
   const rows = data[tabKey];
   const st = c.pct[tab.cls] - data.targets[tab.cls];
@@ -1352,12 +1164,6 @@ const Portfolio = memo(function Portfolio({ data, setData, c, live, setLive, vie
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {tabKey === 'stocks' && (
-            <>
-              <label className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer select-none"><input id="live-price" type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="accent-indigo-600" />Tự chạy 4s</label>
-              <button type="button" onClick={tickPrices} className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Icon name="refresh" size={12} />Cập nhật giá</button>
-            </>
-          )}
           <button type="button" onClick={() => setAdding(true)} aria-label={tab.add} title={tab.add} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg text-white hover:opacity-90 active:scale-95 transition" style={{ background: tab.color }}><Icon name="plus" size={14} />{tab.add}</button>
         </div>
       </div>
@@ -1486,8 +1292,7 @@ function projectGoal(g, surplus) {
   if (g.target > 0 && rem === 0) return { kind: 'done', line: 'Đã đủ số tiền mục tiêu', rem };
   if (g.target <= 0) return { kind: 'none', line: 'Nhập số tiền mục tiêu để xem dự phóng', rem };
   if (surplus <= 0) return { kind: 'bad', line: 'Thặng dư ≤ 0, chưa thể tích lũy thêm', rem };
-  const months = Math.ceil(rem / surplus);
-  const line = `Nếu dồn 100% thặng dư (${compact(surplus)}/th), cần ${months} tháng`;
+  const months = Math.ceil(rem / surplus), line = `Nếu dồn 100% thặng dư (${compact(surplus)}/th), cần ${months} tháng`;
   if (daysLeft < 0) return { kind: 'bad', line, verdict: `Đã quá hạn ${Math.abs(daysLeft)} ngày`, rem };
   const monthsLeft = daysLeft / 30.4375;
   if (months <= monthsLeft) return { kind: 'ok', line, verdict: `Kịp hạn, dư ~${Math.max(0, Math.floor(monthsLeft - months))} tháng`, rem };
@@ -1787,9 +1592,21 @@ function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth 
   const submit = (e) => {
     e.preventDefault();
     const mail = cleanEmail(email);
-    if (!mail.includes('@')) { setError('Vui lòng nhập địa chỉ Gmail hợp lệ (VD: tenban@gmail.com)'); return; }
-    if (pin.length < 4) { setError('Mã PIN / Mật khẩu phải từ 4 ký tự trở lên'); return; }
-    const res = onAuthSuccess({ mode: isRegister ? 'register' : 'login', email: mail, name: name.trim() || mail.split('@')[0], pin, oldPin });
+    if (!mail.includes('@')) {
+      setError('Vui lòng nhập địa chỉ Gmail hợp lệ (VD: tenban@gmail.com)');
+      return;
+    }
+    if (pin.length < 4) {
+      setError('Mã PIN / Mật khẩu phải từ 4 ký tự trở lên');
+      return;
+    }
+    const res = onAuthSuccess({
+      mode: isRegister ? 'register' : 'login',
+      email: mail,
+      name: name.trim() || mail.split('@')[0],
+      pin,
+      oldPin
+    });
     if (!res.ok) setError(res.msg);
   };
 
@@ -1869,7 +1686,8 @@ function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth 
 }
 
 function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry, onSelectInspectUser }) {
-  const me = registry.users[currentUserEmail], isAdmin = me && me.isAdmin;
+  const me = registry.users[currentUserEmail];
+  const isAdmin = me && me.isAdmin;
   const [partnerEmail, setPartnerEmail] = useState(me?.partnerEmail || '');
   const [newPartnerName, setNewPartnerName] = useState('Vợ yêu (User 2)');
   const [newPartnerPin, setNewPartnerPin] = useState('123456');
@@ -1881,13 +1699,24 @@ function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry,
   const linkPartner = (e) => {
     e.preventDefault();
     const targetMail = cleanEmail(partnerEmail);
-    if (!targetMail || !targetMail.includes('@')) { setMsg('Vui lòng nhập đúng định dạng Gmail của Vợ / Cộng sự.'); return; }
-    if (targetMail === currentUserEmail) { setMsg('Không thể liên kết Co-work với chính Gmail của bạn.'); return; }
+    if (!targetMail || !targetMail.includes('@')) {
+      setMsg('Vui lòng nhập đúng định dạng Gmail của Vợ / Cộng sự.');
+      return;
+    }
+    if (targetMail === currentUserEmail) {
+      setMsg('Không thể liên kết Co-work với chính Gmail của bạn.');
+      return;
+    }
     const nextReg = { ...registry, users: { ...registry.users } };
     if (!nextReg.users[targetMail]) {
       nextReg.users[targetMail] = {
-        email: targetMail, name: newPartnerName.trim() || 'Vợ (User 2)', pinHash: hashPin(newPartnerPin || '123456'),
-        isAdmin: false, partnerEmail: currentUserEmail, createdAt: toISO(TODAY), data: makeEmptyUserData(),
+        email: targetMail,
+        name: newPartnerName.trim() || 'Vợ (User 2)',
+        pinHash: hashPin(newPartnerPin || '123456'),
+        isAdmin: false,
+        partnerEmail: currentUserEmail,
+        createdAt: toISO(TODAY),
+        data: makeEmptyUserData(),
       };
     } else {
       nextReg.users[targetMail] = { ...nextReg.users[targetMail], partnerEmail: currentUserEmail };
@@ -1899,8 +1728,12 @@ function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry,
 
   const changeMyPin = (e) => {
     e.preventDefault();
-    if (newPin.length < 4) { setMsg('Mã PIN mới phải có ít nhất 4 ký tự.'); return; }
-    onSaveRegistry({ ...registry, users: { ...registry.users, [currentUserEmail]: { ...me, pinHash: hashPin(newPin) } } });
+    if (newPin.length < 4) {
+      setMsg('Mã PIN mới phải có ít nhất 4 ký tự.');
+      return;
+    }
+    const nextReg = { ...registry, users: { ...registry.users, [currentUserEmail]: { ...me, pinHash: hashPin(newPin) } } };
+    onSaveRegistry(nextReg);
     setNewPin('');
     setMsg('Đã đổi mã PIN / Mật khẩu của bạn thành công!');
   };
@@ -2045,15 +1878,14 @@ function App() {
   const [view, setView] = useState(loadView);
   const [registry, setRegistry] = useState({ version: 3, users: {} });
   const [currentUserEmail, setCurrentUserEmail] = useState('');
-  const [workspaceMode, setWorkspaceMode] = useState('user1');
+  const [workspaceMode, setWorkspaceMode] = useState('user1'); // 'user1' | 'user2' | 'combined' | 'admin_inspect'
   const [inspectEmail, setInspectEmail] = useState('');
-  const [authStatus, setAuthStatus] = useState('checking');
+  const [authStatus, setAuthStatus] = useState('checking'); // 'checking' | 'login' | 'authenticated'
   const [legacyCipher, setLegacyCipher] = useState(null);
   const [legacyPlain, setLegacyPlain] = useState(null);
   const [showAdminModal, setShowAdminModal] = useState(false);
 
   const [sync, setSync] = useState(window.supabaseClient ? 'loading' : 'offline');
-  const [live, setLive] = useState(false);
   const [tab, setTab] = useState('overview');
   const [history, setHistory] = useState(() => loadHistory());
   const [dark, setDark] = useDarkMode();
@@ -2112,6 +1944,7 @@ function App() {
       } catch (err) {}
     }
 
+    // Kiểm tra phiên Google OAuth trên Supabase
     let oauthUser = null;
     if (client) {
       try {
@@ -2131,8 +1964,12 @@ function App() {
         users: {
           ...baseUsers,
           [gEmail]: baseUsers[gEmail] || {
-            email: gEmail, name: gName, pinHash: hashPin('123456'),
-            isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY),
+            email: gEmail,
+            name: gName,
+            pinHash: hashPin('123456'),
+            isAdmin: !hasAnyUser,
+            partnerEmail: '',
+            createdAt: toISO(TODAY),
             data: !hasAnyUser && legacyPlain ? legacyPlain : makeDefaultData(),
           }
         }
@@ -2175,8 +2012,13 @@ function App() {
             users: {
               ...(prev.users || {}),
               [gEmail]: {
-                email: gEmail, name: gName, pinHash: hashPin('123456'),
-                isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY), data: makeDefaultData(),
+                email: gEmail,
+                name: gName,
+                pinHash: hashPin('123456'),
+                isAdmin: !hasAnyUser,
+                partnerEmail: '',
+                createdAt: toISO(TODAY),
+                data: makeDefaultData(),
               }
             }
           };
@@ -2191,7 +2033,9 @@ function App() {
 
   // 2. XÁC THỰC ĐĂNG NHẬP / ĐĂNG KÝ GMAIL
   const handleGmailAuth = ({ mode, email, name, pin, oldPin }) => {
-    const users = registry.users || {}, hasUsers = Object.keys(users).length > 0;
+    const users = registry.users || {};
+    const hasUsers = Object.keys(users).length > 0;
+
     if (mode === 'login') {
       const u = users[email];
       if (!u) return { ok: false, msg: 'Gmail này chưa được đăng ký. Vui lòng chuyển sang tab "Đăng ký Gmail mới".' };
@@ -2204,9 +2048,11 @@ function App() {
     } else {
       if (users[email]) return { ok: false, msg: 'Gmail này đã tồn tại trên hệ thống. Vui lòng chọn Đăng nhập.' };
       let initialData = hasUsers ? makeEmptyUserData() : makeDefaultData();
+
       if (!hasUsers) {
-        if (legacyPlain) initialData = legacyPlain;
-        else if (legacyCipher && oldPin) {
+        if (legacyPlain) {
+          initialData = legacyPlain;
+        } else if (legacyCipher && oldPin) {
           try {
             const bytes = CryptoJS.AES.decrypt(legacyCipher, oldPin);
             const str = bytes.toString(CryptoJS.enc.Utf8);
@@ -2219,8 +2065,22 @@ function App() {
           } catch (e) {}
         }
       }
-      const newUser = { email, name, pinHash: hashPin(pin), isAdmin: !hasUsers, partnerEmail: '', createdAt: toISO(TODAY), data: initialData };
-      setRegistry({ version: 3, users: { ...users, [email]: newUser } });
+
+      const newUser = {
+        email,
+        name,
+        pinHash: hashPin(pin),
+        isAdmin: !hasUsers,
+        partnerEmail: '',
+        createdAt: toISO(TODAY),
+        data: initialData,
+      };
+
+      const nextReg = {
+        version: 3,
+        users: { ...users, [email]: newUser }
+      };
+      setRegistry(nextReg);
       setCurrentUserEmail(email);
       sessionStorage.setItem(SESSION_KEY, email);
       setWorkspaceMode('user1');
@@ -2242,14 +2102,16 @@ function App() {
     }
   };
 
-  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ
+  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ (USER 1, USER 2, GỘP 2 VỢ CHỒNG, HOẶC ADMIN XEM)
   const meUser = registry.users?.[currentUserEmail] || null;
   const partnerEmail = meUser?.partnerEmail ? cleanEmail(meUser.partnerEmail) : '';
   const partnerUser = partnerEmail && registry.users?.[partnerEmail] ? registry.users[partnerEmail] : null;
 
   const activeData = useMemo(() => {
     if (!meUser) return makeDefaultData();
-    if (workspaceMode === 'user2' && partnerUser) return normalizeData(partnerUser.data);
+    if (workspaceMode === 'user2' && partnerUser) {
+      return normalizeData(partnerUser.data);
+    }
     if (workspaceMode === 'combined' && partnerUser) {
       return mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email);
     }
@@ -2259,7 +2121,13 @@ function App() {
     return normalizeData(meUser.data);
   }, [meUser, partnerUser, workspaceMode, inspectEmail, registry.users]);
 
-  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH
+  const c = useMemo(() => compute(activeData), [activeData]);
+  const combinedNet = useMemo(() => {
+    if (!partnerUser || !meUser) return c.net;
+    return compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net;
+  }, [meUser, partnerUser, c.net]);
+
+  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH (TỰ ĐỘNG LƯU VỀ ĐÚNG NGƯỜI SỞ HỮU)
   const setData = useCallback((updater) => {
     setRegistry((prev) => {
       const curMe = prev.users?.[currentUserEmail];
@@ -2271,22 +2139,27 @@ function App() {
         const updated = updater(normalizeData(curMe.data));
         return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: updated } } };
       }
+
       if (workspaceMode === 'user2' && curPartner) {
         const updated = updater(normalizeData(curPartner.data));
         return { ...prev, users: { ...prev.users, [pMail]: { ...curPartner, data: updated } } };
       }
+
       if (workspaceMode === 'admin_inspect' && inspectEmail && prev.users?.[inspectEmail]) {
         const targetU = prev.users[inspectEmail];
         const updated = updater(normalizeData(targetU.data));
         return { ...prev, users: { ...prev.users, [inspectEmail]: { ...targetU, data: updated } } };
       }
+
       if (workspaceMode === 'combined' && curPartner) {
-        const d1 = normalizeData(curMe.data), d2 = normalizeData(curPartner.data);
+        const d1 = normalizeData(curMe.data);
+        const d2 = normalizeData(curPartner.data);
         const mergedBefore = mergeCoupleData(d1, d2, curMe.name, curPartner.name, curMe.email, curPartner.email);
         const mergedAfter = updater(mergedBefore);
 
         const splitList = (list) => {
-          const u1List = [], u2List = [];
+          const u1List = [];
+          const u2List = [];
           (list || []).forEach((item) => {
             const cleanItem = { ...item };
             if (item._owner === pMail) {
@@ -2319,34 +2192,57 @@ function App() {
             safe: Math.max(0, d1.debts.safe + (mergedAfter.debts.safe - mergedBefore.debts.safe)),
             fixed: Math.max(0, d1.debts.fixed + (mergedAfter.debts.fixed - mergedBefore.debts.fixed)),
           },
-          targets: mergedAfter.targets, recMode: mergedAfter.recMode,
-          stocks: stocks1, gold: gold1, savings: sav1, categories: cat1, goals: goals1,
+          targets: mergedAfter.targets,
+          recMode: mergedAfter.recMode,
+          stocks: stocks1,
+          gold: gold1,
+          savings: sav1,
+          categories: cat1,
+          goals: goals1,
         };
-        const nextD2 = { ...d2, stocks: stocks2, gold: gold2, savings: sav2, categories: cat2, goals: goals2 };
-        return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: nextD1 }, [pMail]: { ...curPartner, data: nextD2 } } };
+
+        const nextD2 = {
+          ...d2,
+          stocks: stocks2,
+          gold: gold2,
+          savings: sav2,
+          categories: cat2,
+          goals: goals2,
+        };
+
+        return {
+          ...prev,
+          users: {
+            ...prev.users,
+            [currentUserEmail]: { ...curMe, data: nextD1 },
+            [pMail]: { ...curPartner, data: nextD2 },
+          }
+        };
       }
+
       return prev;
     });
   }, [currentUserEmail, workspaceMode, inspectEmail]);
 
-  const c = useMemo(() => compute(activeData), [activeData]);
-
-  // 5. GHI LỊCH SỬ TÀI SẢN RÒNG & ĐỒNG BỘ MÃ HÓA ĐA LUỒNG (WEB WORKER)
+  // 5. GHI LỊCH SỬ TÀI SẢN RÒNG & ĐỒNG BỘ MÃ HÓA LÊN SUPABASE
   const historyScope = `${currentUserEmail || 'default'}-${workspaceMode}`;
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
-    setHistory(saveSnapshot(c, historyScope));
+    const snap = saveSnapshot(c, historyScope);
+    setHistory(snap);
   }, [authStatus, historyScope, c.total, c.debt, c.net]);
 
   const flush = useCallback(async () => {
     if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
     if (!client) return;
 
-    const myEmail = currentUserEmail, myUserObj = regRef.current.users[myEmail];
+    const myEmail = currentUserEmail;
+    const myUserObj = regRef.current.users[myEmail];
     if (!myUserObj) return;
 
     setSync('saving');
     try {
+      // BƯỚC 1: KÉO DỮ LIỆU MỚI NHẤT TỪ MÂY VỀ (Chống ghi đè Race Condition)
       const { data: row, error: fetchErr } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
       if (fetchErr) throw fetchErr;
 
@@ -2356,21 +2252,34 @@ function App() {
         const str = bytes.toString(CryptoJS.enc.Utf8);
         if (str) {
           const cloudReg = JSON.parse(str);
+          // THUẬT TOÁN MERGE: Gắn data mới của TÔI vào bản Cloud, giữ nguyên data của VỢ
           const nextUsers = { ...cloudReg.users, [myEmail]: myUserObj };
+          
           if (workspaceMode === 'user2' || workspaceMode === 'combined') {
             const pMail = myUserObj.partnerEmail ? cleanEmail(myUserObj.partnerEmail) : '';
-            if (pMail && regRef.current.users[pMail]) nextUsers[pMail] = regRef.current.users[pMail];
+            if (pMail && regRef.current.users[pMail]) {
+              nextUsers[pMail] = regRef.current.users[pMail];
+            }
           }
+
           if (workspaceMode === 'admin_inspect' && inspectEmail && regRef.current.users[inspectEmail]) {
             nextUsers[inspectEmail] = regRef.current.users[inspectEmail];
           }
-          latestReg = { ...cloudReg, users: nextUsers };
+
+          latestReg = {
+            ...cloudReg,
+            users: nextUsers
+          };
         }
       }
 
       const strToSave = JSON.stringify(latestReg);
-      if (strToSave === lastSaved.current) { setSync('ready'); return; }
+      if (strToSave === lastSaved.current) {
+        setSync('ready');
+        return; // Không có gì đổi, hủy lệnh lưu
+      }
 
+      // BƯỚC 2: MÃ HÓA BẢN MERGE VÀ PUSH LÊN MÂY (CHẠY NGẦM TRÊN WORKER)
       const v3_vault = await window.encryptVaultAsync(strToSave, CLOUD_SECRET);
       const { error: upsertErr } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
       if (upsertErr) throw upsertErr;
@@ -2378,6 +2287,7 @@ function App() {
       lastSaved.current = strToSave;
       try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
 
+      // Đồng bộ lại UI nếu phát hiện vợ vừa thêm khoản mới
       setRegistry(latestReg);
       setSync('ready');
     } catch (err) {
@@ -2386,11 +2296,13 @@ function App() {
     }
   }, [authStatus, client, currentUserEmail, workspaceMode, inspectEmail]);
 
+  // BƯỚC 3: TỐI ƯU DEBOUNCE (Chờ 1.5 giây ngưng gõ phím mới đồng bộ để chống lag)
   useEffect(() => {
     if (authStatus !== 'authenticated' || !Object.keys(registry.users || {}).length) return undefined;
     const str = JSON.stringify(registry);
+    
     if (str === lastSaved.current) return undefined;
-
+    
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       if (client) {
@@ -2399,18 +2311,17 @@ function App() {
         const v3_vault = await window.encryptVaultAsync(str, CLOUD_SECRET);
         try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
       }
-    }, 1500);
+    }, 1500); 
     return () => clearTimeout(saveTimer.current);
   }, [registry, authStatus, client, flush]);
 
-  const retry = () => { if (authStatus === 'authenticated') flush(); else loadRemote(); };
+  const retry = () => {
+    if (authStatus === 'authenticated') flush();
+    else loadRemote();
+  };
 
-  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) {} }, [view]);
-  useEffect(() => {
-    if (!live) return undefined;
-    const t = setInterval(() => { setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) })); }, 4000);
-    return () => clearInterval(t);
-  }, [live, setData]);
+  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) { return; } }, [view]);
+  
   useEffect(() => {
     if (!isPhone || authStatus !== 'authenticated') return undefined;
     document.documentElement.classList.add('lock');
@@ -2421,7 +2332,9 @@ function App() {
 
   const handleLogout = async () => {
     sessionStorage.removeItem(SESSION_KEY);
-    if (client) { try { await client.auth.signOut(); } catch (e) {} }
+    if (client) {
+      try { await client.auth.signOut(); } catch (e) {}
+    }
     setCurrentUserEmail('');
     setAuthStatus('login');
   };
@@ -2431,9 +2344,10 @@ function App() {
   }
 
   if (authStatus === 'login' || !meUser) {
+    const hasUsers = Object.keys(registry.users || {}).length > 0;
     return (
       <GmailAuthScreen
-        hasUsers={Object.keys(registry.users || {}).length > 0}
+        hasUsers={hasUsers}
         legacyCipher={legacyCipher}
         onAuthSuccess={handleGmailAuth}
         onGoogleOAuth={handleGoogleOAuth}
@@ -2442,57 +2356,82 @@ function App() {
   }
 
   const allUsersList = Object.values(registry.users || {});
-  const combinedNet = useMemo(() => {
-    if (!partnerUser) return c.net;
-    return compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net;
-  }, [meUser, partnerUser, c.net]);
 
-  const coworkToolbar = (
+  // THANH ĐIỀU KHIỂN USER 1 / USER 2 / GỘP 2 VỢ CHỒNG & ADMIN
+ const coworkToolbar = (
     <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:px-3.5 flex flex-col gap-2 shadow-sm no-print">
       <div className="flex items-center gap-1.5 overflow-x-auto thin-scroll pb-1">
-        <button type="button" onClick={() => setWorkspaceMode('user1')}
-          className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user1' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+        <button
+          type="button"
+          onClick={() => setWorkspaceMode('user1')}
+          className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user1' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+        >
           👤 User 1: {meUser.name}
         </button>
 
         {partnerUser ? (
           <>
-            <button type="button" onClick={() => setWorkspaceMode('user2')}
-              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user2' ? 'bg-pink-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+            <button
+              type="button"
+              onClick={() => setWorkspaceMode('user2')}
+              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user2' ? 'bg-pink-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
               👩 User 2: {partnerUser.name}
             </button>
-            <button type="button" onClick={() => setWorkspaceMode('combined')}
-              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${workspaceMode === 'combined' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}>
+            <button
+              type="button"
+              onClick={() => setWorkspaceMode('combined')}
+              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${workspaceMode === 'combined' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
+            >
               💑 Tổng 2 VC ({compact(combinedNet)})
             </button>
           </>
         ) : (
-          <button type="button" onClick={() => setShowAdminModal(true)}
-            className="shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">
+          <button
+            type="button"
+            onClick={() => setShowAdminModal(true)}
+            className="shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+          >
             + Liên kết Vợ (User 2)
           </button>
         )}
 
         {meUser.isAdmin && allUsersList.length > 1 && (
-          <select aria-label="Admin xem hồ sơ thành viên" value={workspaceMode === 'admin_inspect' ? inspectEmail : ''}
+          <select
+            aria-label="Admin xem hồ sơ thành viên"
+            value={workspaceMode === 'admin_inspect' ? inspectEmail : ''}
             onChange={(e) => {
-              if (e.target.value) { setInspectEmail(e.target.value); setWorkspaceMode('admin_inspect'); }
-              else setWorkspaceMode('user1');
+              if (e.target.value) {
+                setInspectEmail(e.target.value);
+                setWorkspaceMode('admin_inspect');
+              } else {
+                setWorkspaceMode('user1');
+              }
             }}
-            className="shrink-0 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 outline-none cursor-pointer">
+            className="shrink-0 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 outline-none cursor-pointer"
+          >
             <option value="">👑 Admin ({allUsersList.length})</option>
-            {allUsersList.map((u) => <option key={u.email} value={u.email}>👁️ Xem: {u.name} ({u.email})</option>)}
+            {allUsersList.map((u) => (
+              <option key={u.email} value={u.email}>👁️ Xem: {u.name} ({u.email})</option>
+            ))}
           </select>
         )}
       </div>
 
       <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
-        <button type="button" onClick={() => setShowAdminModal(true)}
-          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
+        <button
+          type="button"
+          onClick={() => setShowAdminModal(true)}
+          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
           {meUser.isAdmin ? '👑 Quản trị & Co-work' : '⚙️ Co-work & PIN'}
         </button>
-        <button type="button" onClick={handleLogout} title="Đăng xuất Gmail"
-          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100">
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Đăng xuất Gmail"
+          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100"
+        >
           <Icon name="logout" size={13} /> Thoát
         </button>
       </div>
@@ -2530,8 +2469,7 @@ function App() {
   );
 
   const allocation = <AllocationCard data={activeData} setData={setData} c={c} view={eff} />;
-  const balance = <BalanceCard data={activeData} setData={setData} c={c} />;
-  const portfolio = <Portfolio data={activeData} setData={setData} c={c} live={live} setLive={setLive} view={eff} isCombined={workspaceMode === 'combined'} />;
+  const portfolio = <Portfolio data={activeData} setData={setData} c={c} view={eff} isCombined={workspaceMode === 'combined'} />;
   const topAssets = <TopAssetsCard data={activeData} c={c} />;
   const spending = <SpendingCard data={activeData} setData={setData} c={c} view={eff} />;
   const goals = <GoalsCard data={activeData} setData={setData} c={c} />;
@@ -2570,7 +2508,7 @@ function App() {
         </header>
         <main ref={scrollRef} className="app-scroll flex-1 min-h-0 px-3 py-3 space-y-3">
           {coworkToolbar}
-          {tab === 'overview' && <div className="space-y-3">{kpiBlock}<NetWorthCard history={history} />{allocation}{balance}</div>}
+          {tab === 'overview' && <div className="space-y-3">{kpiBlock}<NetWorthCard history={history} />{allocation}</div>}
           {tab === 'portfolio' && <div className="space-y-3">{portfolio}</div>}
           {tab === 'cash' && <div className="space-y-3">{spending}{topAssets}</div>}
           {tab === 'goals' && <div className="space-y-3">{goals}</div>}
@@ -2641,10 +2579,11 @@ function App() {
 
             <div className={`${tier} grid gap-4 items-start ${midGrid}`}>
               {allocation}
-              {balance}
+              <div className="space-y-4">
+                 <NetWorthCard history={history} />
+                 {/* Bảng cân đối cũ đã được xóa bỏ hoàn toàn */}
+              </div>
             </div>
-
-            <div className={tier}><NetWorthCard history={history} /></div>
 
             <div className={tier}>{portfolio}</div>
 
