@@ -19,32 +19,51 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script>
-    // ── Cấu hình Supabase ─────────────────────────────────────────────
-    window.SUPA_URL  = 'https://bxcroowxyxndqeqeecjz.supabase.co';
-    window.SUPA_KEY  = 'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V';
-    // ─────────────────────────────────────────────────────────────────
-    // Chặn pinch-to-zoom trên iOS Safari
+    window.SUPA_URL = 'https://bxcroowxyxndqeqeecjz.supabase.co';
+    window.SUPA_KEY = 'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V';
+
     ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
       document.addEventListener(name, function (e) { e.preventDefault(); }, { passive: false });
     });
-    // Khởi tạo Supabase client. App vẫn chạy offline nếu CDN lỗi.
+
     window.supabaseClient = null;
     try {
       window.supabaseClient = window.supabase.createClient(window.SUPA_URL, window.SUPA_KEY);
     } catch (e) {
       console.error('Không khởi tạo được Supabase:', e);
     }
-  </script>
 
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Be Vietnam Pro"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif']
+    // Web Worker mã hóa AES-256 chạy ngầm (Giải phóng 100% luồng giao diện chính)
+    window.encryptVaultAsync = function (plainStr, secret) {
+      if (!window.Worker) return Promise.resolve(CryptoJS.AES.encrypt(plainStr, secret).toString());
+      if (!window._cryptoWorker) {
+        const code = `
+          importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js');
+          self.onmessage = function(e) {
+            const { id, plainStr, secret } = e.data;
+            try { self.postMessage({ id, cipher: CryptoJS.AES.encrypt(plainStr, secret).toString() }); }
+            catch (err) { self.postMessage({ id, error: err.message }); }
+          };
+        `;
+        window._cryptoWorker = new Worker(URL.createObjectURL(new Blob([code], { type: 'application/javascript' })));
+        window._cryptoMap = {};
+        window._cryptoWorker.onmessage = function (e) {
+          const { id, cipher, error } = e.data;
+          if (window._cryptoMap[id]) {
+            error ? window._cryptoMap[id].reject(new Error(error)) : window._cryptoMap[id].resolve(cipher);
+            delete window._cryptoMap[id];
           }
-        }
+        };
       }
+      return new Promise((resolve, reject) => {
+        const id = Math.random().toString(36).slice(2);
+        window._cryptoMap[id] = { resolve, reject };
+        window._cryptoWorker.postMessage({ id, plainStr, secret });
+      });
+    };
+
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['"Be Vietnam Pro"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'] } } }
     };
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
@@ -61,7 +80,6 @@
       font-size: 14px; -webkit-text-size-adjust: 100%;
       overscroll-behavior-x: none; touch-action: manipulation;
     }
-    /* Chế độ app (iPhone): khóa trang, chỉ vùng nội dung bên trong được cuộn dọc */
     html.lock { overflow: hidden; height: 100%; }
     body.lock { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: pan-y; }
     .app-scroll {
@@ -69,7 +87,6 @@
       -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-width: none;
     }
     .app-scroll::-webkit-scrollbar { display: none; }
-    /* Ngăn iOS tự động zoom khi chạm vào ô input có font < 16px */
     @media screen and (max-width: 768px) {
       input, select, textarea { font-size: 16px !important; }
     }
@@ -79,18 +96,14 @@
     .thin-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
-    /* ── Dark mode ── */
-    [data-theme="dark"] {
-      --bg: #0f172a; --ink: #f1f5f9; --accent: #818cf8;
-      color-scheme: dark;
-    }
+    /* Dark mode */
+    [data-theme="dark"] { --bg: #0f172a; --ink: #f1f5f9; --accent: #818cf8; color-scheme: dark; }
     [data-theme="dark"] body { background: var(--bg); color: var(--ink); }
     [data-theme="dark"] .bg-white { background: #1e293b !important; }
     [data-theme="dark"] .bg-slate-50 { background: #0f172a !important; }
     [data-theme="dark"] .bg-slate-100 { background: #1e293b !important; }
     [data-theme="dark"] .bg-slate-200 { background: #334155 !important; }
-    [data-theme="dark"] .border-slate-100 { border-color: #334155 !important; }
-    [data-theme="dark"] .border-slate-200 { border-color: #334155 !important; }
+    [data-theme="dark"] .border-slate-100, [data-theme="dark"] .border-slate-200 { border-color: #334155 !important; }
     [data-theme="dark"] .text-slate-900, [data-theme="dark"] .text-slate-800 { color: #f1f5f9 !important; }
     [data-theme="dark"] .text-slate-700 { color: #cbd5e1 !important; }
     [data-theme="dark"] .text-slate-600 { color: #94a3b8 !important; }
@@ -107,12 +120,11 @@
     [data-theme="dark"] .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.5) !important; }
     [data-theme="dark"] .shadow-2xl { box-shadow: 0 25px 50px rgba(0,0,0,0.8) !important; }
 
-    /* ── Print / Export PDF ── */
+    /* Print / Export PDF */
     @media print {
       html, body { background: white !important; color: black !important; }
-      .no-print { display: none !important; }
+      .no-print, header nav { display: none !important; }
       .app-scroll { overflow: visible !important; height: auto !important; }
-      header nav { display: none !important; }
       section { break-inside: avoid; }
       .shadow-sm, .shadow-2xl { box-shadow: none !important; }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -124,7 +136,7 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const { useState, useEffect, useMemo, useRef, useCallback, memo } = React;
 
 const KEY = 'wealthos-multiuser-v3';
 const LEGACY_KEY = 'wealthos-gia-san-data-v2';
@@ -135,13 +147,10 @@ const THEME_KEY = 'wealthos-theme';
 const CLOUD_SECRET = 'wealthos-e2ee-master-vault-2026';
 const MAX_HISTORY = 180;
 
+const NF = new Intl.NumberFormat('vi-VN');
 const uid = () => Math.random().toString(36).slice(2, 9);
 const num = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
-const fmt = (n) => {
-  const v = Math.round(num(n));
-  const s = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return (v < 0 ? '-' : '') + s;
-};
+const fmt = (n) => NF.format(Math.round(num(n)));
 const vnd = (n) => fmt(n) + ' ₫';
 const trim2 = (x) => String(Math.round(x * 100) / 100).replace('.', ',');
 const fixed2 = (x) => x.toFixed(2).replace('.', ',');
@@ -162,18 +171,12 @@ const pcv = (n, d = 1) => (Number.isFinite(n) ? n : 0).toFixed(d).replace('.', '
 const sum = (arr, f) => arr.reduce((s, x) => s + num(f(x)), 0);
 const noon = (d) => { const x = new Date(d); x.setHours(12, 0, 0, 0); return x; };
 const TODAY = noon(new Date());
-const toISO = (d) => {
-  const x = new Date(d);
-  return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
-};
+const toISO = (d) => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
 const parseISO = (s) => { const d = new Date(String(s) + 'T12:00:00'); return Number.isNaN(d.getTime()) ? new Date(TODAY) : d; };
 const addMonths = (d, m) => {
-  const x = new Date(d);
-  const day = x.getDate();
-  x.setDate(1);
-  x.setMonth(x.getMonth() + m);
-  const last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
-  x.setDate(Math.min(day, last));
+  const x = new Date(d), day = x.getDate();
+  x.setDate(1); x.setMonth(x.getMonth() + m);
+  x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate()));
   return x;
 };
 const fmtDate = (d) => String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
@@ -211,10 +214,7 @@ const CAT_COLORS = ['#2563eb', '#0d9488', '#d97706', '#db2777', '#7c3aed', '#089
 
 function makeDefaultData() {
   return {
-    cash: 25000000,
-    receivable: 10000000,
-    estate: 2100000000,
-    estateName: 'Căn hộ Happy City',
+    cash: 25000000, receivable: 10000000, estate: 2100000000, estateName: 'Căn hộ Happy City',
     debts: { risk: 30000000, safe: 0, fixed: 1500000000 },
     targets: { stock: 45, gold: 20, bank: 25, cash: 10, recv: 0, estate: 0 },
     stocks: [
@@ -230,9 +230,7 @@ function makeDefaultData() {
       { id: 'b1', bank: 'Vietcombank', principal: 200000000, rate: 5.2, term: 12, start: '2026-03-15' },
       { id: 'b2', bank: 'Techcombank', principal: 150000000, rate: 4.75, term: 6, start: '2026-08-20' },
     ],
-    income: 17000000,
-    budget: 7000000,
-    fireTarget: 0,
+    income: 17000000, budget: 7000000, fireTarget: 0,
     categories: [
       { id: 'c1', name: 'Thiết yếu', color: CAT_COLORS[0], amount: 0, items: [
         { id: 'i1', name: 'Tiền nhà', amount: 2000000 }, { id: 'i2', name: 'Tiền điện', amount: 500000 }, { id: 'i3', name: 'Đổ xăng', amount: 1000000 } ] },
@@ -261,8 +259,7 @@ function makeEmptyUserData() {
       { id: uid(), name: 'Thiết yếu', color: CAT_COLORS[0], amount: 3000000, items: [] },
       { id: uid(), name: 'Sinh hoạt', color: CAT_COLORS[1], amount: 1500000, items: [] },
     ],
-    goals: [],
-    recMode: 'rebalance',
+    goals: [], recMode: 'rebalance',
   };
 }
 
@@ -286,45 +283,29 @@ function normalizeData(raw) {
     items: (Array.isArray(r.items) ? r.items : []).map((it) => ({ id: it.id || uid(), name: String(it.name || ''), amount: num(it.amount) })),
   }));
   out.goals = list('goals').map((r) => ({
-    id: r.id || uid(),
-    name: String(r.name || ''),
-    current: num(r.current),
-    target: num(r.target),
+    id: r.id || uid(), name: String(r.name || ''), current: num(r.current), target: num(r.target),
     deadline: typeof r.deadline === 'string' && r.deadline ? r.deadline : toISO(addMonths(TODAY, 12)),
     source: GOAL_SOURCES.some((s) => s.key === r.source) ? r.source : 'bank',
     priority: [1, 2, 3].includes(num(r.priority)) ? num(r.priority) : 2,
-    _owner: r._owner,
-    _ownerName: r._ownerName,
+    _owner: r._owner, _ownerName: r._ownerName,
   }));
   out.recMode = src.recMode === 'monthly' ? 'monthly' : 'rebalance';
   return out;
 }
 
-// GỘP DỮ LIỆU 2 VỢ CHỒNG (CO-WORK COMBINED DATA)
 function mergeCoupleData(u1Data, u2Data, u1Name, u2Name, u1Email, u2Email) {
-  const d1 = normalizeData(u1Data);
-  const d2 = normalizeData(u2Data);
+  const d1 = normalizeData(u1Data), d2 = normalizeData(u2Data);
   const tag1 = (arr) => arr.map((x) => ({ ...x, _owner: u1Email, _ownerName: u1Name }));
   const tag2 = (arr) => arr.map((x) => ({ ...x, _owner: u2Email, _ownerName: u2Name }));
-
-  const estateNames = [d1.estateName, d2.estateName].filter(Boolean).join(' + ') || 'BĐS Gia đình';
   return {
-    cash: d1.cash + d2.cash,
-    receivable: d1.receivable + d2.receivable,
-    estate: d1.estate + d2.estate,
-    estateName: estateNames,
-    debts: {
-      risk: d1.debts.risk + d2.debts.risk,
-      safe: d1.debts.safe + d2.debts.safe,
-      fixed: d1.debts.fixed + d2.debts.fixed,
-    },
+    cash: d1.cash + d2.cash, receivable: d1.receivable + d2.receivable, estate: d1.estate + d2.estate,
+    estateName: [d1.estateName, d2.estateName].filter(Boolean).join(' + ') || 'BĐS Gia đình',
+    debts: { risk: d1.debts.risk + d2.debts.risk, safe: d1.debts.safe + d2.debts.safe, fixed: d1.debts.fixed + d2.debts.fixed },
     targets: { ...d1.targets },
     stocks: [...tag1(d1.stocks), ...tag2(d2.stocks)],
     gold: [...tag1(d1.gold), ...tag2(d2.gold)],
     savings: [...tag1(d1.savings), ...tag2(d2.savings)],
-    income: d1.income + d2.income,
-    budget: d1.budget + d2.budget,
-    fireTarget: d1.fireTarget + d2.fireTarget,
+    income: d1.income + d2.income, budget: d1.budget + d2.budget, fireTarget: d1.fireTarget + d2.fireTarget,
     categories: [
       ...d1.categories.map((c) => ({ ...c, name: `${c.name} (${u1Name})`, _owner: u1Email, _ownerName: u1Name })),
       ...d2.categories.map((c) => ({ ...c, name: `${c.name} (${u2Name})`, _owner: u2Email, _ownerName: u2Name })),
@@ -356,17 +337,7 @@ function compute(d) {
     return { ...g, assets, debt: d.debts[g.key], equity: assets - d.debts[g.key] };
   });
   return {
-    stockTotal,
-    goldTotal,
-    bankTotal,
-    actual,
-    total,
-    debt,
-    net,
-    pct,
-    spent,
-    groups,
-    fireTarget,
+    stockTotal, goldTotal, bankTotal, actual, total, debt, net, pct, spent, groups, fireTarget,
     surplus: d.income - spent,
     firePct: fireTarget > 0 ? Math.max(0, (net / fireTarget) * 100) : 0,
     targetSum: sum(CLASSES, (c) => d.targets[c.key])
@@ -421,34 +392,29 @@ function NetWorthChart({ history }) {
 
   const W = 480, H = 180, PAD = { l: 48, r: 16, t: 12, b: 32 };
   const iW = W - PAD.l - PAD.r, iH = H - PAD.t - PAD.b;
-
   const vals = history.map(h => h.net);
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
-  const range = maxV - minV || 1;
+  const minV = Math.min(...vals), maxV = Math.max(...vals), range = maxV - minV || 1;
   const toX = (i) => PAD.l + (i / (history.length - 1)) * iW;
   const toY = (v) => PAD.t + (1 - (v - minV) / range) * iH;
-
-  const yTicks = [-2,-1,0,1,2].map(k => maxV - k * (range/4)).filter(v => v >= minV - range*0.1 && v <= maxV + range*0.1);
-
+  const yTicks = [-2, -1, 0, 1, 2].map(k => maxV - k * (range / 4)).filter(v => v >= minV - range * 0.1 && v <= maxV + range * 0.1);
   const pts = history.map((h, i) => [toX(i), toY(h.net)]);
   const linePath = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
-  const areaPath = linePath + ` L${pts[pts.length-1][0]},${PAD.t+iH} L${pts[0][0]},${PAD.t+iH} Z`;
+  const areaPath = linePath + ` L${pts[pts.length - 1][0]},${PAD.t + iH} L${pts[0][0]},${PAD.t + iH} Z`;
 
   const xLabels = [];
   if (history.length <= 7) {
-    history.forEach((h, i) => { const d = parseISO(h.date); xLabels.push({ i, text: `${d.getDate()}/${d.getMonth()+1}` }); });
+    history.forEach((h, i) => { const d = parseISO(h.date); xLabels.push({ i, text: `${d.getDate()}/${d.getMonth() + 1}` }); });
   } else {
     const step = Math.floor(history.length / 4);
-    [0, step, step*2, step*3, history.length-1].forEach(i => {
+    [0, step, step * 2, step * 3, history.length - 1].forEach(i => {
       if (i < history.length) {
         const d = parseISO(history[i].date);
-        xLabels.push({ i, text: `${d.getDate()}/${d.getMonth()+1}` });
+        xLabels.push({ i, text: `${d.getDate()}/${d.getMonth() + 1}` });
       }
     });
   }
 
   const hd = hover !== null ? history[hover] : null;
-
   return (
     <div className="relative">
       {hd && (
@@ -458,8 +424,7 @@ function NetWorthChart({ history }) {
           <p className="text-slate-500 tnum">TS: {compact(hd.total)} · Nợ: {compact(hd.debt)}</p>
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{maxHeight: 180}}
-        onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 180 }} onMouseLeave={() => setHover(null)}>
         <defs>
           <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18" />
@@ -474,21 +439,20 @@ function NetWorthChart({ history }) {
         ))}
         <path d={areaPath} fill="url(#nwGrad)" />
         <path d={linePath} fill="none" stroke="#4f46e5" strokeWidth="1.8" strokeLinejoin="round" />
-        {xLabels.map(({i, text}) => (
+        {xLabels.map(({ i, text }) => (
           <text key={i} x={toX(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#94a3b8">{text}</text>
         ))}
         {pts.map(([x, y], i) => (
           <circle key={i} cx={x} cy={y} r={hover === i ? 5 : 3}
             fill={hover === i ? '#4f46e5' : 'white'} stroke="#4f46e5" strokeWidth="1.5"
-            style={{cursor:'pointer'}}
-            onMouseEnter={() => setHover(i)} />
+            style={{ cursor: 'pointer' }} onMouseEnter={() => setHover(i)} />
         ))}
       </svg>
     </div>
   );
 }
 
-function NetWorthCard({ history }) {
+const NetWorthCard = memo(function NetWorthCard({ history }) {
   const [period, setPeriod] = useState('all');
   const now = useMemo(() => new Date(TODAY), []);
   const filtered = useMemo(() => {
@@ -498,18 +462,16 @@ function NetWorthCard({ history }) {
     return history.filter(h => parseISO(h.date) >= cutoff);
   }, [history, period, now]);
 
-  const change = filtered.length >= 2
-    ? filtered[filtered.length-1].net - filtered[0].net : 0;
-  const changePct = filtered.length >= 2 && filtered[0].net !== 0
-    ? (change / Math.abs(filtered[0].net)) * 100 : 0;
+  const change = filtered.length >= 2 ? filtered[filtered.length - 1].net - filtered[0].net : 0;
+  const changePct = filtered.length >= 2 && filtered[0].net !== 0 ? (change / Math.abs(filtered[0].net)) * 100 : 0;
 
   return (
     <Card
       title="Lịch sử tài sản ròng"
       right={
         <div role="tablist" className="flex gap-1">
-          {[['7d','7N'],['30d','1T'],['90d','3T'],['all','Tất cả']].map(([k,l]) => (
-            <TabButton key={k} small active={period===k} onClick={() => setPeriod(k)}>{l}</TabButton>
+          {[['7d', '7N'], ['30d', '1T'], ['90d', '3T'], ['all', 'Tất cả']].map(([k, l]) => (
+            <TabButton key={k} small active={period === k} onClick={() => setPeriod(k)}>{l}</TabButton>
           ))}
         </div>
       }
@@ -518,12 +480,12 @@ function NetWorthCard({ history }) {
         <div className="flex gap-3 mb-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tài sản ròng hiện tại</p>
-            <p className="text-lg font-extrabold text-indigo-700 tnum">{big(filtered[filtered.length-1].net)}</p>
+            <p className="text-lg font-extrabold text-indigo-700 tnum">{big(filtered[filtered.length - 1].net)}</p>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Thay đổi kỳ</p>
             <p className={`text-lg font-extrabold tnum ${change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {change >= 0 ? '+' : ''}{big(change)} <span className="text-sm font-bold">({change >= 0?'+':''}{pcv(changePct,1)})</span>
+              {change >= 0 ? '+' : ''}{big(change)} <span className="text-sm font-bold">({change >= 0 ? '+' : ''}{pcv(changePct, 1)})</span>
             </p>
           </div>
         </div>
@@ -531,10 +493,10 @@ function NetWorthCard({ history }) {
       <NetWorthChart history={filtered} />
     </Card>
   );
-}
+});
 
 /* ══════════════════════════════════════════════════
-   DARK MODE TOGGLE
+   DARK MODE TOGGLE & UI PRIMITIVES
    ══════════════════════════════════════════════════ */
 function useDarkMode() {
   const [dark, setDark] = useState(() => {
@@ -549,25 +511,12 @@ function useDarkMode() {
 
 function DarkToggle({ dark, setDark }) {
   return (
-    <button
-      type="button"
-      onClick={() => setDark(d => !d)}
-      title={dark ? 'Chuyển sang sáng' : 'Chuyển sang tối'}
+    <button type="button" onClick={() => setDark(d => !d)} title={dark ? 'Chuyển sang sáng' : 'Chuyển sang tối'}
       aria-label={dark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-100 transition"
-    >
-      <Icon name={dark ? 'sparkles' : 'moon'} size={14} />
-      {dark ? 'Sáng' : 'Tối'}
+      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-100 transition">
+      <Icon name={dark ? 'sparkles' : 'moon'} size={14} />{dark ? 'Sáng' : 'Tối'}
     </button>
   );
-}
-
-function niceAxis(max) {
-  const m = max > 0 ? max : 1e6;
-  const base = Math.pow(10, Math.floor(Math.log10(m / 4)));
-  const step = [1, 2, 2.5, 5, 10].map((k) => k * base).find((s) => s * 4 >= m) || 10 * base;
-  const n = Math.max(1, Math.ceil(m / step));
-  return { max: n * step, ticks: Array.from({ length: n + 1 }, (_, i) => i * step) };
 }
 
 const ICONS = {
@@ -592,10 +541,7 @@ const ICONS = {
   target: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0zM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
   moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
   print: 'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
-  lock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 10 0v4',
   users: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
-  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
 };
 
@@ -625,8 +571,7 @@ function NumInput({ value, onChange, decimal = false, className = '', placeholde
     const raw = e.target.value;
     if (decimal) {
       const t = sanitizeDec(raw);
-      setTxt(t);
-      onChange(parse(t));
+      setTxt(t); onChange(parse(t));
     } else {
       const digits = raw.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
       setTxt(digits === '' ? '' : fmt(Number(digits)));
@@ -641,9 +586,7 @@ const CELL_L = 'w-full bg-transparent rounded-md px-1.5 py-1 text-xs border bord
 const BOXED = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
 const FIELD = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:bg-white';
 
-function Money({ v, className = '' }) {
-  return <span title={vnd(v)} className={`tnum cursor-help ${className}`}>{compact(v)}</span>;
-}
+const Money = ({ v, className = '' }) => <span title={vnd(v)} className={`tnum cursor-help ${className}`}>{compact(v)}</span>;
 
 function Card({ title, right, className = '', children }) {
   return (
@@ -699,7 +642,7 @@ function IconBtn({ onClick, label, icon, tone = 'slate' }) {
   return <button type="button" onClick={onClick} aria-label={label} title={label} className={`p-1 rounded-md text-slate-400 transition ${t}`}><Icon name={icon} size={14} /></button>;
 }
 
-function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '', small = false }) {
+const Kpi = memo(function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '', small = false }) {
   return (
     <div className={`rounded-2xl border p-4 min-w-0 ${dark ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-900'} ${className}`}>
       <p className={`text-[10px] font-bold uppercase tracking-wider ${dark ? 'text-indigo-200' : 'text-slate-500'}`}>{label}</p>
@@ -713,7 +656,7 @@ function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '',
       {extra}
     </div>
   );
-}
+});
 
 function TableLayout({ heads, isEmpty, empty, foot, children }) {
   return (
@@ -751,7 +694,7 @@ function Countdown({ days }) {
   return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700">Còn {days} ngày</span>;
 }
 
-function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
+const DonutChart = memo(function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
   const [hv, setHv] = useState(null);
   const aSum = CLASSES.reduce((s, c) => s + Math.max(0, actual[c.key]), 0);
   const tSum = CLASSES.reduce((s, c) => s + Math.max(0, targets[c.key]), 0);
@@ -775,8 +718,7 @@ function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
           <g key={ring.id}>
             <circle cx="110" cy="110" r={ring.r} fill="none" stroke="#e2e8f0" strokeWidth={ring.sw} />
             {ring.sum > 0 && ring.items.map(({ c, v }) => {
-              const len = (v / ring.sum) * C;
-              const off = acc;
+              const len = (v / ring.sum) * C, off = acc;
               acc += len;
               if (len <= 0) return null;
               const dim = hv && !(hv.ring === ring.id && hv.key === c.key);
@@ -808,9 +750,9 @@ function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
       )}
     </svg>
   );
-}
+});
 
-function AllocationCard({ data, setData, c, view }) {
+const AllocationCard = memo(function AllocationCard({ data, setData, c, view }) {
   const setTarget = (k, v) => setData((d) => ({ ...d, targets: { ...d.targets, [k]: v } }));
   const targetOk = Math.abs(c.targetSum - 100) < 0.001;
   const autos = { stock: c.stockTotal, gold: c.goldTotal, bank: c.bankTotal };
@@ -819,8 +761,7 @@ function AllocationCard({ data, setData, c, view }) {
     recv: [data.receivable, (v) => setData((d) => ({ ...d, receivable: v }))],
     estate: [data.estate, (v) => setData((d) => ({ ...d, estate: v }))]
   };
-  const mode = data.recMode;
-  const S = c.surplus;
+  const mode = data.recMode, S = c.surplus;
   const rows = CLASSES.map((cl) => {
     const target = (c.total * data.targets[cl.key]) / 100;
     return { cl, actual: c.actual[cl.key], target, diff: target - c.actual[cl.key] };
@@ -889,7 +830,7 @@ function AllocationCard({ data, setData, c, view }) {
       </div>
     </Card>
   );
-}
+});
 
 /* ---------- Nhận định tự động ---------- */
 const TONES = {
@@ -918,9 +859,7 @@ function Insight({ items, title = 'Nhận định' }) {
 function topAssetInsights(items, c, data) {
   const out = [];
   if (!items.length || c.total <= 0) return out;
-  const top = items[0];
-  const t1 = (top.value / c.total) * 100;
-  const t3 = (sum(items.slice(0, 3), (a) => a.value) / c.total) * 100;
+  const top = items[0], t1 = (top.value / c.total) * 100, t3 = (sum(items.slice(0, 3), (a) => a.value) / c.total) * 100;
   if (t1 >= 50) out.push({ tone: 'warn', head: 'Tập trung cao.', body: `${top.name} chiếm ${pcv(t1, 0)} tổng tài sản. Nếu tài sản này mất 10% giá trị, tổng tài sản giảm ${pcv(t1 / 10, 1)}.` });
   else if (t1 >= 30) out.push({ tone: 'info', head: 'Khá tập trung.', body: `${top.name} chiếm ${pcv(t1, 0)}, top 3 chiếm ${pcv(t3, 0)} tổng tài sản.` });
   else out.push({ tone: 'good', head: 'Phân tán tốt.', body: `Tài sản lớn nhất chỉ chiếm ${pcv(t1, 0)}, top 3 chiếm ${pcv(t3, 0)} tổng tài sản.` });
@@ -928,8 +867,7 @@ function topAssetInsights(items, c, data) {
     const ltv = (data.debts.fixed / data.estate) * 100;
     out.push({ tone: ltv > 70 ? 'bad' : ltv > 50 ? 'warn' : 'info', head: 'Đòn bẩy bất động sản.', body: `Vay thế chấp bằng ${pcv(ltv, 0)} giá trị ${data.estateName || 'bất động sản'}. Phần sở hữu thực còn ${compact(data.estate - data.debts.fixed)}.` });
   }
-  const liquid = c.actual.stock + c.actual.gold + c.actual.bank + c.actual.cash;
-  const lp = (liquid / c.total) * 100;
+  const liquid = c.actual.stock + c.actual.gold + c.actual.bank + c.actual.cash, lp = (liquid / c.total) * 100;
   out.push({ tone: lp >= 40 ? 'good' : lp >= 20 ? 'info' : 'warn', head: 'Thanh khoản.', body: `${pcv(lp, 0)} tài sản (${compact(liquid)}) quy ra tiền được trong vài ngày, ${pcv(100 - lp, 0)} nằm ở tài sản khó bán nhanh.` });
   if (c.pct.recv >= 10) out.push({ tone: 'warn', head: 'Nợ phải đòi.', body: `Chiếm ${pcv(c.pct.recv, 0)} tổng tài sản. Nên chốt thời hạn thu hồi để tránh tiền bị treo.` });
   return out;
@@ -967,8 +905,7 @@ function spendingInsights(data, c) {
 function portfolioInsights(tabKey, data, c) {
   const out = [];
   const cls = tabKey === 'stocks' ? 'stock' : tabKey === 'gold' ? 'gold' : 'bank';
-  const rows = data[tabKey];
-  const label = { stocks: 'cổ phiếu', gold: 'vàng', savings: 'tiền gửi' }[tabKey];
+  const rows = data[tabKey], label = { stocks: 'cổ phiếu', gold: 'vàng', savings: 'tiền gửi' }[tabKey];
   if (rows.length === 0) return [{ tone: 'info', head: 'Chưa có dữ liệu.', body: `Thêm ${label} để xem nhận định về danh mục.` }];
   const gap = c.pct[cls] - data.targets[cls];
   const gapText = Math.abs(gap) <= 2 ? ', đang cân đối.' : gap < 0 ? `, thiếu ${pcv(-gap, 0)} (khoảng ${compact((-gap / 100) * c.total)}).` : `, vượt ${pcv(gap, 0)} (khoảng ${compact((gap / 100) * c.total)}).`;
@@ -984,8 +921,7 @@ function portfolioInsights(tabKey, data, c) {
       const b = ranked[0], w = ranked[ranked.length - 1];
       out.push({ tone: w.p < 0 ? 'warn' : 'info', head: 'Mã nổi bật.', body: `${b.code} tốt nhất (${b.p >= 0 ? '+' : ''}${pcv(b.p)}), ${w.code} yếu nhất (${w.p >= 0 ? '+' : ''}${pcv(w.p)})${w.p < 0 ? '. Nên xem lại luận điểm đầu tư của mã này.' : '.'}` });
     }
-    const top = list.slice().sort((a, b) => b.qty * b.price - a.qty * a.price)[0];
-    const ts = ((top.qty * top.price) / tv) * 100;
+    const top = list.slice().sort((a, b) => b.qty * b.price - a.qty * a.price)[0], ts = ((top.qty * top.price) / tv) * 100;
     if (list.length >= 2 && ts >= 50) out.push({ tone: 'warn', head: 'Tập trung một mã.', body: `${top.code || '?'} chiếm ${pcv(ts, 0)} giá trị cổ phiếu, rủi ro riêng lẻ cao.` });
     const gaps = list.map((r) => { const a = ((r.qty * r.price) / tv) * 100; return { code: r.code || '?', a, t: r.target, d: a - r.target }; }).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
     if (gaps[0] && Math.abs(gaps[0].d) >= 5) out.push({ tone: 'info', head: 'Lệch target.', body: `${gaps[0].code} đang ${pcv(gaps[0].a, 0)} so với target ${pcv(gaps[0].t, 0)}, nên ${gaps[0].d > 0 ? 'giảm' : 'tăng'} khoảng ${compact((Math.abs(gaps[0].d) / 100) * tv)}.` });
@@ -1004,17 +940,14 @@ function portfolioInsights(tabKey, data, c) {
   } else {
     const list = rows.filter((r) => r.principal > 0);
     if (list.length === 0) return out;
-    const tp = sum(list, (r) => r.principal);
-    const avg = sum(list, (r) => r.principal * r.rate) / tp;
-    const interest = sum(list, (r) => (r.principal * r.rate * r.term) / 1200);
+    const tp = sum(list, (r) => r.principal), avg = sum(list, (r) => r.principal * r.rate) / tp, interest = sum(list, (r) => (r.principal * r.rate * r.term) / 1200);
     out.push({ tone: 'info', head: 'Lãi suất bình quân.', body: `${pcv(avg, 2)}/năm trên ${compact(tp)} gốc, lãi dự kiến cả kỳ ${compact(interest)}.` });
     const m = list.map((r) => ({ r, d: daysBetween(TODAY, addMonths(parseISO(r.start), Math.round(r.term))) })).sort((a, b) => a.d - b.d)[0];
     const nm = m.r.bank || '(chưa đặt tên)';
     if (m.d < 0) out.push({ tone: 'bad', head: 'Đã quá hạn.', body: `Sổ ${nm} quá hạn ${-m.d} ngày, nên tất toán hoặc tái tục sớm.` });
     else if (m.d <= 30) out.push({ tone: 'warn', head: 'Sắp đáo hạn.', body: `Sổ ${nm} còn ${m.d} ngày, cần quyết định tái tục hay rút ra để đầu tư.` });
     else out.push({ tone: 'good', head: 'Lịch đáo hạn.', body: `Sổ gần nhất (${nm}) đáo hạn sau ${m.d} ngày, chưa cần xử lý gấp.` });
-    const topB = list.slice().sort((a, b) => b.principal - a.principal)[0];
-    const bs = (topB.principal / tp) * 100;
+    const topB = list.slice().sort((a, b) => b.principal - a.principal)[0], bs = (topB.principal / tp) * 100;
     if (list.length >= 2 && bs >= 60) out.push({ tone: 'warn', head: 'Tập trung ngân hàng.', body: `${topB.bank || '(chưa đặt tên)'} giữ ${pcv(bs, 0)} tiền gửi, nên cân nhắc chia sang ngân hàng khác.` });
   }
   return out;
@@ -1040,7 +973,8 @@ function RatioChip({ label, value, tone, hint }) {
     </div>
   );
 }
-function BalanceCard({ data, setData, c }) {
+
+const BalanceCard = memo(function BalanceCard({ data, setData, c }) {
   const setDebt = (k, v) => setData((d) => ({ ...d, debts: { ...d.debts, [k]: v } }));
   const debtPct = c.total > 0 ? Math.min(100, (c.debt / c.total) * 100) : 0;
   const equityPct = c.total > 0 ? 100 - debtPct : 0;
@@ -1082,10 +1016,8 @@ function BalanceCard({ data, setData, c }) {
 
       <div className="mt-4 space-y-2.5">
         {c.groups.map((g) => {
-          const share = c.total > 0 ? (g.assets / c.total) * 100 : 0;
-          const ltv = g.assets > 0 ? (g.debt / g.assets) * 100 : 0;
-          const eq = Math.max(0, g.equity);
-          const dShown = Math.min(g.debt, g.assets);
+          const share = c.total > 0 ? (g.assets / c.total) * 100 : 0, ltv = g.assets > 0 ? (g.debt / g.assets) * 100 : 0;
+          const eq = Math.max(0, g.equity), dShown = Math.min(g.debt, g.assets);
           const ltvCls = ltv > 70 ? 'bg-rose-50 text-rose-700' : ltv > 40 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600';
           return (
             <div key={g.key} className="rounded-xl border border-slate-200 p-3">
@@ -1130,8 +1062,9 @@ function BalanceCard({ data, setData, c }) {
       </div>
     </Card>
   );
-}
+});
 
+/* ---------- Nhập liệu danh mục đầu tư ---------- */
 const TABS = [
   { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã cổ phiếu' },
   { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm loại vàng' },
@@ -1199,7 +1132,7 @@ function PField({ id, label, children }) {
   );
 }
 
-function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
+const Portfolio = memo(function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
   const [tabKey, setTabKey] = useState('stocks');
   const [adding, setAdding] = useState(false);
   const tab = TABS.find((t) => t.key === tabKey);
@@ -1327,9 +1260,7 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
   }
 
   const phone = view === 'phone';
-  const pAll = sum(rows, (r) => r.qty * (r.price - r.cost));
-  const cAll = sum(rows, (r) => r.qty * r.cost);
-  const interestAll = sum(rows, (r) => (r.principal * r.rate * r.term) / 1200);
+  const pAll = sum(rows, (r) => r.qty * (r.price - r.cost)), cAll = sum(rows, (r) => r.qty * r.cost), interestAll = sum(rows, (r) => (r.principal * r.rate * r.term) / 1200);
   const phoneCards = rows.map((r) => {
     if (tabKey === 'stocks') {
       const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
@@ -1420,17 +1351,16 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
             {TABS.map((t) => <TabButton key={t.key} color={t.color} active={t.key === tabKey} onClick={() => setTabKey(t.key)}>{t.label}</TabButton>)}
           </div>
         </div>
-
-        
-     <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {tabKey === 'stocks' && (
+            <>
+              <label className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer select-none"><input id="live-price" type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="accent-indigo-600" />Tự chạy 4s</label>
+              <button type="button" onClick={tickPrices} className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Icon name="refresh" size={12} />Cập nhật giá</button>
+            </>
+          )}
           <button type="button" onClick={() => setAdding(true)} aria-label={tab.add} title={tab.add} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg text-white hover:opacity-90 active:scale-95 transition" style={{ background: tab.color }}><Icon name="plus" size={14} />{tab.add}</button>
         </div>
-
-
-        
       </div>
-
-      
       <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 pb-3 text-xs">
         <span className="font-bold text-slate-700">{tab.label}:</span>
         <Money v={totalOf} className="font-extrabold text-slate-900" />
@@ -1452,9 +1382,9 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
       {adding && <AddModal tab={tab} onSubmit={addRow} onClose={() => setAdding(false)} />}
     </section>
   );
-}
+});
 
-function TopAssetsCard({ data, c }) {
+const TopAssetsCard = memo(function TopAssetsCard({ data, c }) {
   const items = [
     ...data.stocks.map((r) => ({ name: `Cổ phiếu ${r.code || '(chưa đặt mã)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Cổ phiếu', value: r.qty * r.price, color: CLASSES[0].color })),
     ...data.gold.map((r) => ({ name: `Vàng ${r.type || '(chưa đặt tên)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Vàng', value: r.qty * r.price, color: CLASSES[1].color })),
@@ -1463,8 +1393,7 @@ function TopAssetsCard({ data, c }) {
     { name: 'Nợ phải đòi', type: 'Nợ phải đòi', value: data.receivable, color: CLASSES[4].color },
     { name: data.estateName || 'Bất động sản', type: 'Bất động sản', value: data.estate, color: CLASSES[5].color },
   ].filter((a) => a.value > 0).sort((a, b) => b.value - a.value);
-  const shown = items.slice(0, 6);
-  const max = shown.length ? shown[0].value : 1;
+  const shown = items.slice(0, 6), max = shown.length ? shown[0].value : 1;
   return (
     <Card title="Top tài sản lớn nhất" right={<span className="text-[11px] font-semibold text-slate-500 tnum">Tổng TS {compact(c.total)}</span>}>
       <div className="space-y-3.5">
@@ -1477,14 +1406,11 @@ function TopAssetsCard({ data, c }) {
       <Insight items={topAssetInsights(items, c, data)} />
     </Card>
   );
-}
+});
 
 function CategoryRow({ cat, budget, onChange, onDelete, view }) {
   const [open, setOpen] = useState(false);
-  const ph = view === 'phone';
-  const total = catTotal(cat);
-  const p = budget > 0 ? (total / budget) * 100 : 0;
-  const over = p > 100;
+  const ph = view === 'phone', total = catTotal(cat), p = budget > 0 ? (total / budget) * 100 : 0, over = p > 100;
   const addItem = () => {
     let items = cat.items, amount = cat.amount;
     if (items.length === 0 && amount > 0) { items = [{ id: uid(), name: 'Chi chung', amount }]; amount = 0; }
@@ -1527,7 +1453,7 @@ function CategoryRow({ cat, budget, onChange, onDelete, view }) {
   );
 }
 
-function SpendingCard({ data, setData, c, view }) {
+const SpendingCard = memo(function SpendingCard({ data, setData, c, view }) {
   const updCat = (id, patch) => setData((d) => ({ ...d, categories: d.categories.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const delCat = (id) => setData((d) => ({ ...d, categories: d.categories.filter((x) => x.id !== id) }));
   const addCat = () => setData((d) => ({ ...d, categories: [...d.categories, { id: uid(), name: '', color: CAT_COLORS[d.categories.length % CAT_COLORS.length], amount: 0, items: [] }] }));
@@ -1553,12 +1479,10 @@ function SpendingCard({ data, setData, c, view }) {
       <Insight items={spendingInsights(data, c)} />
     </Card>
   );
-}
+});
 
 function projectGoal(g, surplus) {
-  const rem = Math.max(0, g.target - g.current);
-  const deadline = parseISO(g.deadline);
-  const daysLeft = daysBetween(TODAY, deadline);
+  const rem = Math.max(0, g.target - g.current), daysLeft = daysBetween(TODAY, parseISO(g.deadline));
   if (g.target > 0 && rem === 0) return { kind: 'done', line: 'Đã đủ số tiền mục tiêu', rem };
   if (g.target <= 0) return { kind: 'none', line: 'Nhập số tiền mục tiêu để xem dự phóng', rem };
   if (surplus <= 0) return { kind: 'bad', line: 'Thặng dư ≤ 0, chưa thể tích lũy thêm', rem };
@@ -1570,34 +1494,19 @@ function projectGoal(g, surplus) {
   return { kind: 'bad', line, verdict: `Không kịp hạn, trễ ~${Math.round(months - monthsLeft)} tháng. Cần ${compact(rem / Math.max(1, Math.floor(monthsLeft)))}/tháng`, rem };
 }
 
-function GoalsCard({ data, setData, c }) {
+const GoalsCard = memo(function GoalsCard({ data, setData, c }) {
   const [editId, setEditId] = useState(null);
   const upd = (id, patch) => setData((d) => ({ ...d, goals: d.goals.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
   const del = (id) => setData((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) }));
   const add = (preset = null) => {
     const id = uid();
-    const newGoal = preset || {
-      id,
-      name: 'Mục tiêu mới',
-      current: 0,
-      target: 50000000,
-      deadline: toISO(addMonths(TODAY, 12)),
-      source: 'bank',
-      priority: 2
-    };
+    const newGoal = preset || { id, name: 'Mục tiêu mới', current: 0, target: 50000000, deadline: toISO(addMonths(TODAY, 12)), source: 'bank', priority: 2 };
     setData((d) => ({ ...d, goals: [...d.goals, { ...newGoal, id }] }));
     if (!preset) setEditId(id);
   };
 
-  const poolAvail = {
-    bank: c.bankTotal,
-    cash: data.cash,
-    gold: c.goldTotal,
-    stock: c.stockTotal,
-  };
-
-  const poolStats = {};
-  const goalAllocStatus = {};
+  const poolAvail = { bank: c.bankTotal, cash: data.cash, gold: c.goldTotal, stock: c.stockTotal };
+  const poolStats = {}, goalAllocStatus = {};
 
   ['bank', 'cash', 'gold', 'stock'].forEach((srcKey) => {
     const avail = poolAvail[srcKey] || 0;
@@ -1606,48 +1515,29 @@ function GoalsCard({ data, setData, c }) {
       .slice()
       .sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
 
-    const totalUsed = sum(goalsInSrc, (g) => g.current);
-    const balance = avail - totalUsed;
+    const totalUsed = sum(goalsInSrc, (g) => g.current), balance = avail - totalUsed;
     let remPool = avail;
 
     goalsInSrc.forEach((g) => {
-      const covered = Math.max(0, Math.min(g.current, remPool));
-      const uncovered = Math.max(0, g.current - covered);
+      const covered = Math.max(0, Math.min(g.current, remPool)), uncovered = Math.max(0, g.current - covered);
       remPool = Math.max(0, remPool - g.current);
       goalAllocStatus[g.id] = { covered, uncovered, avail, totalUsed, balance };
     });
 
-    poolStats[srcKey] = {
-      key: srcKey,
-      label: GOAL_SOURCES.find((s) => s.key === srcKey).label,
-      avail,
-      totalUsed,
-      balance,
-      count: goalsInSrc.length,
-      goalsInSrc
-    };
+    poolStats[srcKey] = { key: srcKey, label: GOAL_SOURCES.find((s) => s.key === srcKey).label, avail, totalUsed, balance, count: goalsInSrc.length, goalsInSrc };
   });
 
   const overdrawnPools = Object.values(poolStats).filter((p) => p.balance < 0);
-
   const suggestions = [];
   const emergencyTarget = c.spent > 0 ? c.spent * 6 : 42000000;
   const hasEmergencyGoal = data.goals.some((g) => /khẩn cấp|dự phòng/i.test(g.name));
 
   if (!hasEmergencyGoal) {
     suggestions.push({
-      id: 'sug-emg',
-      tone: 'amber',
+      id: 'sug-emg', tone: 'amber',
       text: `Bạn chưa có Quỹ khẩn cấp (chuẩn 6 tháng chi tiêu = ${compact(emergencyTarget)}). Nên ưu tiên số 1 từ Tiền gửi NH để bảo vệ tài sản.`,
       actionLabel: '+ Tạo Quỹ khẩn cấp',
-      onAction: () => add({
-        name: 'Quỹ khẩn cấp 6 tháng',
-        current: Math.min(c.bankTotal, emergencyTarget),
-        target: emergencyTarget,
-        deadline: toISO(addMonths(TODAY, 6)),
-        source: 'bank',
-        priority: 1
-      })
+      onAction: () => add({ name: 'Quỹ khẩn cấp 6 tháng', current: Math.min(c.bankTotal, emergencyTarget), target: emergencyTarget, deadline: toISO(addMonths(TODAY, 6)), source: 'bank', priority: 1 })
     });
   }
 
@@ -1655,41 +1545,31 @@ function GoalsCard({ data, setData, c }) {
     const lowPrioGoals = p.goalsInSrc.filter((g) => goalAllocStatus[g.id]?.uncovered > 0);
     const names = lowPrioGoals.map((g) => `“${g.name}” (Ưu tiên ${g.priority || 2})`).join(', ');
     suggestions.push({
-      id: `sug-over-${p.key}`,
-      tone: 'rose',
+      id: `sug-over-${p.key}`, tone: 'rose',
       text: `Nguồn ${p.label} đang chỉ có ${compact(p.avail)} nhưng bạn phân bổ tới ${compact(p.totalUsed)} (Đang âm ${compact(Math.abs(p.balance))}). Khuyến nghị: Giảm số tiền hiện có hoặc lùi độ ưu tiên của ${names || 'mục tiêu phụ'}.`
     });
   });
 
-  const activeGoals = data.goals
-    .filter((g) => g.target > g.current)
-    .slice()
-    .sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
+  const activeGoals = data.goals.filter((g) => g.target > g.current).slice().sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
 
   if (c.surplus > 0 && activeGoals.length > 0) {
-    const topG = activeGoals[0];
-    const rem = topG.target - topG.current;
-    const mNeed = Math.ceil(rem / c.surplus);
+    const topG = activeGoals[0], rem = topG.target - topG.current, mNeed = Math.ceil(rem / c.surplus);
     suggestions.push({
-      id: 'sug-surplus',
-      tone: 'indigo',
+      id: 'sug-surplus', tone: 'indigo',
       text: `Gợi ý ưu tiên thặng dư (+${compact(c.surplus)}/tháng): Nên dồn trước cho “${topG.name}” (Ưu tiên ${topG.priority || 2}, còn thiếu ${compact(rem)}). Chỉ mất khoảng ${mNeed} tháng để hoàn thành dứt điểm.`
     });
   } else if (c.surplus <= 0 && activeGoals.length > 0) {
     suggestions.push({
-      id: 'sug-nosurplus',
-      tone: 'amber',
+      id: 'sug-nosurplus', tone: 'amber',
       text: `Thặng dư tháng đang ≤ 0 (${compact(c.surplus)}). Bạn cần cắt giảm chi tiêu hoặc tăng thu nhập để có dòng tiền nuôi ${activeGoals.length} mục tiêu đang chạy.`
     });
   }
 
-  const freeBank = Math.max(0, poolStats.bank.balance);
-  const freeCash = Math.max(0, poolStats.cash.balance);
+  const freeBank = Math.max(0, poolStats.bank.balance), freeCash = Math.max(0, poolStats.cash.balance);
   if ((freeBank + freeCash) >= 10000000 && activeGoals.length > 0) {
     const topG = activeGoals[0];
     suggestions.push({
-      id: 'sug-idle',
-      tone: 'emerald',
+      id: 'sug-idle', tone: 'emerald',
       text: `Bạn đang còn ${compact(freeBank + freeCash)} vốn thanh khoản chưa gán mục tiêu (${compact(freeBank)} Tiền gửi NH, ${compact(freeCash)} Tiền mặt). Có thể phân bổ thêm vào “${topG.name}” để rút ngắn thời gian.`
     });
   }
@@ -1757,14 +1637,11 @@ function GoalsCard({ data, setData, c }) {
       <div className="space-y-3">
         {data.goals.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có mục tiêu. Bấm + để thêm.</p>}
         {data.goals.map((g) => {
-          const p = g.target > 0 ? (g.current / g.target) * 100 : 0;
-          const pj = projectGoal(g, c.surplus);
-          const good = pj.kind === 'done' || pj.kind === 'ok';
-          const editing = editId === g.id;
+          const p = g.target > 0 ? (g.current / g.target) * 100 : 0, pj = projectGoal(g, c.surplus);
+          const good = pj.kind === 'done' || pj.kind === 'ok', editing = editId === g.id;
           const srcObj = GOAL_SOURCES.find((s) => s.key === (g.source || 'bank')) || GOAL_SOURCES[0];
           const prioObj = PRIORITIES.find((pr) => pr.v === (g.priority || 2)) || PRIORITIES[1];
-          const alloc = goalAllocStatus[g.id];
-          const isShortfall = alloc && alloc.uncovered > 0;
+          const alloc = goalAllocStatus[g.id], isShortfall = alloc && alloc.uncovered > 0;
 
           return (
             <article key={g.id + (g._owner || '')} className={`rounded-xl border p-3 transition ${isShortfall ? 'border-rose-400 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'}`}>
@@ -1778,26 +1655,11 @@ function GoalsCard({ data, setData, c }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <select
-                  aria-label="Nguồn vốn"
-                  value={g.source || 'bank'}
-                  onChange={(e) => upd(g.id, { source: e.target.value })}
-                  className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}
-                >
-                  {GOAL_SOURCES.map((s) => (
-                    <option key={s.key} value={s.key}>Nguồn: {s.label}</option>
-                  ))}
+                <select aria-label="Nguồn vốn" value={g.source || 'bank'} onChange={(e) => upd(g.id, { source: e.target.value })} className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}>
+                  {GOAL_SOURCES.map((s) => <option key={s.key} value={s.key}>Nguồn: {s.label}</option>)}
                 </select>
-
-                <select
-                  aria-label="Mức độ ưu tiên"
-                  value={g.priority || 2}
-                  onChange={(e) => upd(g.id, { priority: Number(e.target.value) })}
-                  className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}
-                >
-                  {PRIORITIES.map((pr) => (
-                    <option key={pr.v} value={pr.v}>{pr.label}</option>
-                  ))}
+                <select aria-label="Mức độ ưu tiên" value={g.priority || 2} onChange={(e) => upd(g.id, { priority: Number(e.target.value) })} className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}>
+                  {PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                 </select>
               </div>
 
@@ -1840,7 +1702,7 @@ function GoalsCard({ data, setData, c }) {
       </div>
     </Card>
   );
-}
+});
 
 const VIEWS = [
   { k: 'pc', label: 'PC View', icon: 'monitor' },
@@ -1925,21 +1787,9 @@ function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth 
   const submit = (e) => {
     e.preventDefault();
     const mail = cleanEmail(email);
-    if (!mail.includes('@')) {
-      setError('Vui lòng nhập địa chỉ Gmail hợp lệ (VD: tenban@gmail.com)');
-      return;
-    }
-    if (pin.length < 4) {
-      setError('Mã PIN / Mật khẩu phải từ 4 ký tự trở lên');
-      return;
-    }
-    const res = onAuthSuccess({
-      mode: isRegister ? 'register' : 'login',
-      email: mail,
-      name: name.trim() || mail.split('@')[0],
-      pin,
-      oldPin
-    });
+    if (!mail.includes('@')) { setError('Vui lòng nhập địa chỉ Gmail hợp lệ (VD: tenban@gmail.com)'); return; }
+    if (pin.length < 4) { setError('Mã PIN / Mật khẩu phải từ 4 ký tự trở lên'); return; }
+    const res = onAuthSuccess({ mode: isRegister ? 'register' : 'login', email: mail, name: name.trim() || mail.split('@')[0], pin, oldPin });
     if (!res.ok) setError(res.msg);
   };
 
@@ -1972,41 +1822,19 @@ function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth 
         <form onSubmit={submit} className="space-y-3.5">
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Địa chỉ Gmail</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(''); }}
-              placeholder="ví dụ: hoangson@gmail.com"
-              className={FIELD}
-              autoFocus
-            />
+            <input type="email" required value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="ví dụ: hoangson@gmail.com" className={FIELD} autoFocus />
           </div>
 
           {isRegister && (
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Tên hiển thị (VD: Chồng / Vợ)</label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => { setName(e.target.value); setError(''); }}
-                placeholder="VD: Hoàng Sơn (Admin)"
-                className={FIELD}
-              />
+              <input type="text" required value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="VD: Hoàng Sơn (Admin)" className={FIELD} />
             </div>
           )}
 
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Mã PIN / Mật khẩu bảo mật</label>
-            <input
-              type="password"
-              required
-              value={pin}
-              onChange={(e) => { setPin(e.target.value); setError(''); }}
-              placeholder="Nhập từ 4 ký tự / số trở lên"
-              className={`${FIELD} font-bold tracking-widest`}
-            />
+            <input type="password" required value={pin} onChange={(e) => { setPin(e.target.value); setError(''); }} placeholder="Nhập từ 4 ký tự / số trở lên" className={`${FIELD} font-bold tracking-widest`} />
           </div>
 
           {!hasUsers && legacyCipher && (
@@ -2014,13 +1842,7 @@ function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth 
               <label className="block text-[11px] font-bold text-amber-900 mb-1">
                 Phát hiện dữ liệu đã mã hóa từ phiên bản trước. Nhập mã PIN cũ để khôi phục tự động (hoặc bỏ trống nếu muốn tạo mới):
               </label>
-              <input
-                type="password"
-                value={oldPin}
-                onChange={(e) => setOldPin(e.target.value)}
-                placeholder="Mã PIN cũ của bạn"
-                className={`${FIELD} bg-white`}
-              />
+              <input type="password" value={oldPin} onChange={(e) => setOldPin(e.target.value)} placeholder="Mã PIN cũ của bạn" className={`${FIELD} bg-white`} />
             </div>
           )}
 
@@ -2047,8 +1869,7 @@ function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth 
 }
 
 function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry, onSelectInspectUser }) {
-  const me = registry.users[currentUserEmail];
-  const isAdmin = me && me.isAdmin;
+  const me = registry.users[currentUserEmail], isAdmin = me && me.isAdmin;
   const [partnerEmail, setPartnerEmail] = useState(me?.partnerEmail || '');
   const [newPartnerName, setNewPartnerName] = useState('Vợ yêu (User 2)');
   const [newPartnerPin, setNewPartnerPin] = useState('123456');
@@ -2060,53 +1881,26 @@ function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry,
   const linkPartner = (e) => {
     e.preventDefault();
     const targetMail = cleanEmail(partnerEmail);
-    if (!targetMail || !targetMail.includes('@')) {
-      setMsg('Vui lòng nhập đúng định dạng Gmail của Vợ / Cộng sự.');
-      return;
-    }
-    if (targetMail === currentUserEmail) {
-      setMsg('Không thể liên kết Co-work với chính Gmail của bạn.');
-      return;
-    }
+    if (!targetMail || !targetMail.includes('@')) { setMsg('Vui lòng nhập đúng định dạng Gmail của Vợ / Cộng sự.'); return; }
+    if (targetMail === currentUserEmail) { setMsg('Không thể liên kết Co-work với chính Gmail của bạn.'); return; }
     const nextReg = { ...registry, users: { ...registry.users } };
     if (!nextReg.users[targetMail]) {
       nextReg.users[targetMail] = {
-        email: targetMail,
-        name: newPartnerName.trim() || 'Vợ (User 2)',
-        pinHash: hashPin(newPartnerPin || '123456'),
-        isAdmin: false,
-        partnerEmail: currentUserEmail,
-        createdAt: toISO(TODAY),
-        data: makeEmptyUserData(),
+        email: targetMail, name: newPartnerName.trim() || 'Vợ (User 2)', pinHash: hashPin(newPartnerPin || '123456'),
+        isAdmin: false, partnerEmail: currentUserEmail, createdAt: toISO(TODAY), data: makeEmptyUserData(),
       };
     } else {
-      nextReg.users[targetMail] = {
-        ...nextReg.users[targetMail],
-        partnerEmail: currentUserEmail,
-      };
+      nextReg.users[targetMail] = { ...nextReg.users[targetMail], partnerEmail: currentUserEmail };
     }
-    nextReg.users[currentUserEmail] = {
-      ...nextReg.users[currentUserEmail],
-      partnerEmail: targetMail,
-    };
+    nextReg.users[currentUserEmail] = { ...nextReg.users[currentUserEmail], partnerEmail: targetMail };
     onSaveRegistry(nextReg);
     setMsg(`Đã liên kết Co-work 2 vợ chồng thành công với ${targetMail}!`);
   };
 
   const changeMyPin = (e) => {
     e.preventDefault();
-    if (newPin.length < 4) {
-      setMsg('Mã PIN mới phải có ít nhất 4 ký tự.');
-      return;
-    }
-    const nextReg = {
-      ...registry,
-      users: {
-        ...registry.users,
-        [currentUserEmail]: { ...me, pinHash: hashPin(newPin) }
-      }
-    };
-    onSaveRegistry(nextReg);
+    if (newPin.length < 4) { setMsg('Mã PIN mới phải có ít nhất 4 ký tự.'); return; }
+    onSaveRegistry({ ...registry, users: { ...registry.users, [currentUserEmail]: { ...me, pinHash: hashPin(newPin) } } });
     setNewPin('');
     setMsg('Đã đổi mã PIN / Mật khẩu của bạn thành công!');
   };
@@ -2114,26 +1908,12 @@ function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry,
   const toggleUserAdmin = (uMail) => {
     if (uMail === currentUserEmail) return;
     const target = registry.users[uMail];
-    const nextReg = {
-      ...registry,
-      users: {
-        ...registry.users,
-        [uMail]: { ...target, isAdmin: !target.isAdmin }
-      }
-    };
-    onSaveRegistry(nextReg);
+    onSaveRegistry({ ...registry, users: { ...registry.users, [uMail]: { ...target, isAdmin: !target.isAdmin } } });
   };
 
   const resetUserPin = (uMail) => {
     const target = registry.users[uMail];
-    const nextReg = {
-      ...registry,
-      users: {
-        ...registry.users,
-        [uMail]: { ...target, pinHash: hashPin('123456') }
-      }
-    };
-    onSaveRegistry(nextReg);
+    onSaveRegistry({ ...registry, users: { ...registry.users, [uMail]: { ...target, pinHash: hashPin('123456') } } });
     setMsg(`Đã đặt lại mã PIN của ${uMail} về mặc định: 123456`);
   };
 
@@ -2265,9 +2045,9 @@ function App() {
   const [view, setView] = useState(loadView);
   const [registry, setRegistry] = useState({ version: 3, users: {} });
   const [currentUserEmail, setCurrentUserEmail] = useState('');
-  const [workspaceMode, setWorkspaceMode] = useState('user1'); // 'user1' | 'user2' | 'combined' | 'admin_inspect'
+  const [workspaceMode, setWorkspaceMode] = useState('user1');
   const [inspectEmail, setInspectEmail] = useState('');
-  const [authStatus, setAuthStatus] = useState('checking'); // 'checking' | 'login' | 'authenticated'
+  const [authStatus, setAuthStatus] = useState('checking');
   const [legacyCipher, setLegacyCipher] = useState(null);
   const [legacyPlain, setLegacyPlain] = useState(null);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -2332,7 +2112,6 @@ function App() {
       } catch (err) {}
     }
 
-    // Kiểm tra phiên Google OAuth trên Supabase
     let oauthUser = null;
     if (client) {
       try {
@@ -2352,12 +2131,8 @@ function App() {
         users: {
           ...baseUsers,
           [gEmail]: baseUsers[gEmail] || {
-            email: gEmail,
-            name: gName,
-            pinHash: hashPin('123456'),
-            isAdmin: !hasAnyUser,
-            partnerEmail: '',
-            createdAt: toISO(TODAY),
+            email: gEmail, name: gName, pinHash: hashPin('123456'),
+            isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY),
             data: !hasAnyUser && legacyPlain ? legacyPlain : makeDefaultData(),
           }
         }
@@ -2400,13 +2175,8 @@ function App() {
             users: {
               ...(prev.users || {}),
               [gEmail]: {
-                email: gEmail,
-                name: gName,
-                pinHash: hashPin('123456'),
-                isAdmin: !hasAnyUser,
-                partnerEmail: '',
-                createdAt: toISO(TODAY),
-                data: makeDefaultData(),
+                email: gEmail, name: gName, pinHash: hashPin('123456'),
+                isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY), data: makeDefaultData(),
               }
             }
           };
@@ -2421,9 +2191,7 @@ function App() {
 
   // 2. XÁC THỰC ĐĂNG NHẬP / ĐĂNG KÝ GMAIL
   const handleGmailAuth = ({ mode, email, name, pin, oldPin }) => {
-    const users = registry.users || {};
-    const hasUsers = Object.keys(users).length > 0;
-
+    const users = registry.users || {}, hasUsers = Object.keys(users).length > 0;
     if (mode === 'login') {
       const u = users[email];
       if (!u) return { ok: false, msg: 'Gmail này chưa được đăng ký. Vui lòng chuyển sang tab "Đăng ký Gmail mới".' };
@@ -2436,11 +2204,9 @@ function App() {
     } else {
       if (users[email]) return { ok: false, msg: 'Gmail này đã tồn tại trên hệ thống. Vui lòng chọn Đăng nhập.' };
       let initialData = hasUsers ? makeEmptyUserData() : makeDefaultData();
-
       if (!hasUsers) {
-        if (legacyPlain) {
-          initialData = legacyPlain;
-        } else if (legacyCipher && oldPin) {
+        if (legacyPlain) initialData = legacyPlain;
+        else if (legacyCipher && oldPin) {
           try {
             const bytes = CryptoJS.AES.decrypt(legacyCipher, oldPin);
             const str = bytes.toString(CryptoJS.enc.Utf8);
@@ -2453,22 +2219,8 @@ function App() {
           } catch (e) {}
         }
       }
-
-      const newUser = {
-        email,
-        name,
-        pinHash: hashPin(pin),
-        isAdmin: !hasUsers,
-        partnerEmail: '',
-        createdAt: toISO(TODAY),
-        data: initialData,
-      };
-
-      const nextReg = {
-        version: 3,
-        users: { ...users, [email]: newUser }
-      };
-      setRegistry(nextReg);
+      const newUser = { email, name, pinHash: hashPin(pin), isAdmin: !hasUsers, partnerEmail: '', createdAt: toISO(TODAY), data: initialData };
+      setRegistry({ version: 3, users: { ...users, [email]: newUser } });
       setCurrentUserEmail(email);
       sessionStorage.setItem(SESSION_KEY, email);
       setWorkspaceMode('user1');
@@ -2490,16 +2242,14 @@ function App() {
     }
   };
 
-  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ (USER 1, USER 2, GỘP 2 VỢ CHỒNG, HOẶC ADMIN XEM)
+  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ
   const meUser = registry.users?.[currentUserEmail] || null;
   const partnerEmail = meUser?.partnerEmail ? cleanEmail(meUser.partnerEmail) : '';
   const partnerUser = partnerEmail && registry.users?.[partnerEmail] ? registry.users[partnerEmail] : null;
 
   const activeData = useMemo(() => {
     if (!meUser) return makeDefaultData();
-    if (workspaceMode === 'user2' && partnerUser) {
-      return normalizeData(partnerUser.data);
-    }
+    if (workspaceMode === 'user2' && partnerUser) return normalizeData(partnerUser.data);
     if (workspaceMode === 'combined' && partnerUser) {
       return mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email);
     }
@@ -2509,7 +2259,7 @@ function App() {
     return normalizeData(meUser.data);
   }, [meUser, partnerUser, workspaceMode, inspectEmail, registry.users]);
 
-  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH (TỰ ĐỘNG LƯU VỀ ĐÚNG NGƯỜI SỞ HỮU)
+  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH
   const setData = useCallback((updater) => {
     setRegistry((prev) => {
       const curMe = prev.users?.[currentUserEmail];
@@ -2521,27 +2271,22 @@ function App() {
         const updated = updater(normalizeData(curMe.data));
         return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: updated } } };
       }
-
       if (workspaceMode === 'user2' && curPartner) {
         const updated = updater(normalizeData(curPartner.data));
         return { ...prev, users: { ...prev.users, [pMail]: { ...curPartner, data: updated } } };
       }
-
       if (workspaceMode === 'admin_inspect' && inspectEmail && prev.users?.[inspectEmail]) {
         const targetU = prev.users[inspectEmail];
         const updated = updater(normalizeData(targetU.data));
         return { ...prev, users: { ...prev.users, [inspectEmail]: { ...targetU, data: updated } } };
       }
-
       if (workspaceMode === 'combined' && curPartner) {
-        const d1 = normalizeData(curMe.data);
-        const d2 = normalizeData(curPartner.data);
+        const d1 = normalizeData(curMe.data), d2 = normalizeData(curPartner.data);
         const mergedBefore = mergeCoupleData(d1, d2, curMe.name, curPartner.name, curMe.email, curPartner.email);
         const mergedAfter = updater(mergedBefore);
 
         const splitList = (list) => {
-          const u1List = [];
-          const u2List = [];
+          const u1List = [], u2List = [];
           (list || []).forEach((item) => {
             const cleanItem = { ...item };
             if (item._owner === pMail) {
@@ -2574,70 +2319,34 @@ function App() {
             safe: Math.max(0, d1.debts.safe + (mergedAfter.debts.safe - mergedBefore.debts.safe)),
             fixed: Math.max(0, d1.debts.fixed + (mergedAfter.debts.fixed - mergedBefore.debts.fixed)),
           },
-          targets: mergedAfter.targets,
-          recMode: mergedAfter.recMode,
-          stocks: stocks1,
-          gold: gold1,
-          savings: sav1,
-          categories: cat1,
-          goals: goals1,
+          targets: mergedAfter.targets, recMode: mergedAfter.recMode,
+          stocks: stocks1, gold: gold1, savings: sav1, categories: cat1, goals: goals1,
         };
-
-        const nextD2 = {
-          ...d2,
-          stocks: stocks2,
-          gold: gold2,
-          savings: sav2,
-          categories: cat2,
-          goals: goals2,
-        };
-
-        return {
-          ...prev,
-          users: {
-            ...prev.users,
-            [currentUserEmail]: { ...curMe, data: nextD1 },
-            [pMail]: { ...curPartner, data: nextD2 },
-          }
-        };
+        const nextD2 = { ...d2, stocks: stocks2, gold: gold2, savings: sav2, categories: cat2, goals: goals2 };
+        return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: nextD1 }, [pMail]: { ...curPartner, data: nextD2 } } };
       }
-
       return prev;
     });
   }, [currentUserEmail, workspaceMode, inspectEmail]);
 
   const c = useMemo(() => compute(activeData), [activeData]);
 
-  // 5. GHI LỊCH SỬ TÀI SẢN RÒNG & ĐỒNG BỘ MÃ HÓA LÊN SUPABASE
+  // 5. GHI LỊCH SỬ TÀI SẢN RÒNG & ĐỒNG BỘ MÃ HÓA ĐA LUỒNG (WEB WORKER)
   const historyScope = `${currentUserEmail || 'default'}-${workspaceMode}`;
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
-    const snap = saveSnapshot(c, historyScope);
-    setHistory(snap);
+    setHistory(saveSnapshot(c, historyScope));
   }, [authStatus, historyScope, c.total, c.debt, c.net]);
 
-
-
-
-
-
-
-
-
-
-
-
-const flush = useCallback(async () => {
+  const flush = useCallback(async () => {
     if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
     if (!client) return;
 
-    const myEmail = currentUserEmail;
-    const myUserObj = regRef.current.users[myEmail];
+    const myEmail = currentUserEmail, myUserObj = regRef.current.users[myEmail];
     if (!myUserObj) return;
 
     setSync('saving');
     try {
-      // BƯỚC 1: KÉO DỮ LIỆU MỚI NHẤT TỪ MÂY VỀ (Chống ghi đè Race Condition)
       const { data: row, error: fetchErr } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
       if (fetchErr) throw fetchErr;
 
@@ -2647,89 +2356,56 @@ const flush = useCallback(async () => {
         const str = bytes.toString(CryptoJS.enc.Utf8);
         if (str) {
           const cloudReg = JSON.parse(str);
-          // THUẬT TOÁN MERGE: Gắn data mới của TÔI vào bản Cloud, giữ nguyên data của VỢ
-          latestReg = {
-            ...cloudReg,
-            users: {
-              ...cloudReg.users,
-              [myEmail]: myUserObj 
-            }
-          };
+          const nextUsers = { ...cloudReg.users, [myEmail]: myUserObj };
+          if (workspaceMode === 'user2' || workspaceMode === 'combined') {
+            const pMail = myUserObj.partnerEmail ? cleanEmail(myUserObj.partnerEmail) : '';
+            if (pMail && regRef.current.users[pMail]) nextUsers[pMail] = regRef.current.users[pMail];
+          }
+          if (workspaceMode === 'admin_inspect' && inspectEmail && regRef.current.users[inspectEmail]) {
+            nextUsers[inspectEmail] = regRef.current.users[inspectEmail];
+          }
+          latestReg = { ...cloudReg, users: nextUsers };
         }
       }
 
       const strToSave = JSON.stringify(latestReg);
-      if (strToSave === lastSaved.current) {
-        setSync('ready');
-        return; // Không có gì đổi, hủy lệnh lưu
-      }
+      if (strToSave === lastSaved.current) { setSync('ready'); return; }
 
-      // BƯỚC 2: MÃ HÓA BẢN MERGE VÀ PUSH LÊN MÂY
-      const v3_vault = CryptoJS.AES.encrypt(strToSave, CLOUD_SECRET).toString();
+      const v3_vault = await window.encryptVaultAsync(strToSave, CLOUD_SECRET);
       const { error: upsertErr } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
       if (upsertErr) throw upsertErr;
 
       lastSaved.current = strToSave;
       try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
 
-      // Đồng bộ lại UI nếu phát hiện vợ vừa thêm khoản mới
       setRegistry(latestReg);
       setSync('ready');
     } catch (err) {
       console.error('Lỗi lưu Supabase:', err);
       setSync('error');
     }
-  }, [authStatus, client, currentUserEmail]);
+  }, [authStatus, client, currentUserEmail, workspaceMode, inspectEmail]);
 
-  // BƯỚC 3: TỐI ƯU DEBOUNCE (Chờ 3 giây ngưng gõ phím mới mã hóa để chống lag)
   useEffect(() => {
     if (authStatus !== 'authenticated' || !Object.keys(registry.users || {}).length) return undefined;
     const str = JSON.stringify(registry);
-    try { localStorage.setItem(KEY, JSON.stringify({ v3_vault: CryptoJS.AES.encrypt(str, CLOUD_SECRET).toString() })); } catch (e) {}
-    
-    if (!client || str === lastSaved.current) return undefined;
-    
+    if (str === lastSaved.current) return undefined;
+
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(flush, 3000); 
+    saveTimer.current = setTimeout(async () => {
+      if (client) {
+        await flush();
+      } else {
+        const v3_vault = await window.encryptVaultAsync(str, CLOUD_SECRET);
+        try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
+      }
+    }, 1500);
     return () => clearTimeout(saveTimer.current);
   }, [registry, authStatus, client, flush]);
 
+  const retry = () => { if (authStatus === 'authenticated') flush(); else loadRemote(); };
 
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-  const retry = () => {
-    if (authStatus === 'authenticated') flush();
-    else loadRemote();
-  };
-
-  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) { return; } }, [view]);
+  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) {} }, [view]);
   useEffect(() => {
     if (!live) return undefined;
     const t = setInterval(() => { setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) })); }, 4000);
@@ -2745,9 +2421,7 @@ const flush = useCallback(async () => {
 
   const handleLogout = async () => {
     sessionStorage.removeItem(SESSION_KEY);
-    if (client) {
-      try { await client.auth.signOut(); } catch (e) {}
-    }
+    if (client) { try { await client.auth.signOut(); } catch (e) {} }
     setCurrentUserEmail('');
     setAuthStatus('login');
   };
@@ -2757,10 +2431,9 @@ const flush = useCallback(async () => {
   }
 
   if (authStatus === 'login' || !meUser) {
-    const hasUsers = Object.keys(registry.users || {}).length > 0;
     return (
       <GmailAuthScreen
-        hasUsers={hasUsers}
+        hasUsers={Object.keys(registry.users || {}).length > 0}
         legacyCipher={legacyCipher}
         onAuthSuccess={handleGmailAuth}
         onGoogleOAuth={handleGoogleOAuth}
@@ -2769,85 +2442,57 @@ const flush = useCallback(async () => {
   }
 
   const allUsersList = Object.values(registry.users || {});
-  const combinedNet = partnerUser
-    ? compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net
-    : c.net;
+  const combinedNet = useMemo(() => {
+    if (!partnerUser) return c.net;
+    return compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net;
+  }, [meUser, partnerUser, c.net]);
 
-  // THANH ĐIỀU KHIỂN USER 1 / USER 2 / GỘP 2 VỢ CHỒNG & ADMIN
- const coworkToolbar = (
+  const coworkToolbar = (
     <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:px-3.5 flex flex-col gap-2 shadow-sm no-print">
       <div className="flex items-center gap-1.5 overflow-x-auto thin-scroll pb-1">
-        <button
-          type="button"
-          onClick={() => setWorkspaceMode('user1')}
-          className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user1' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-        >
+        <button type="button" onClick={() => setWorkspaceMode('user1')}
+          className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user1' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
           👤 User 1: {meUser.name}
         </button>
 
         {partnerUser ? (
           <>
-            <button
-              type="button"
-              onClick={() => setWorkspaceMode('user2')}
-              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user2' ? 'bg-pink-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-            >
+            <button type="button" onClick={() => setWorkspaceMode('user2')}
+              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user2' ? 'bg-pink-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
               👩 User 2: {partnerUser.name}
             </button>
-            <button
-              type="button"
-              onClick={() => setWorkspaceMode('combined')}
-              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${workspaceMode === 'combined' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
-            >
+            <button type="button" onClick={() => setWorkspaceMode('combined')}
+              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${workspaceMode === 'combined' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}>
               💑 Tổng 2 VC ({compact(combinedNet)})
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={() => setShowAdminModal(true)}
-            className="shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
-          >
+          <button type="button" onClick={() => setShowAdminModal(true)}
+            className="shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">
             + Liên kết Vợ (User 2)
           </button>
         )}
 
         {meUser.isAdmin && allUsersList.length > 1 && (
-          <select
-            aria-label="Admin xem hồ sơ thành viên"
-            value={workspaceMode === 'admin_inspect' ? inspectEmail : ''}
+          <select aria-label="Admin xem hồ sơ thành viên" value={workspaceMode === 'admin_inspect' ? inspectEmail : ''}
             onChange={(e) => {
-              if (e.target.value) {
-                setInspectEmail(e.target.value);
-                setWorkspaceMode('admin_inspect');
-              } else {
-                setWorkspaceMode('user1');
-              }
+              if (e.target.value) { setInspectEmail(e.target.value); setWorkspaceMode('admin_inspect'); }
+              else setWorkspaceMode('user1');
             }}
-            className="shrink-0 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 outline-none cursor-pointer"
-          >
+            className="shrink-0 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 outline-none cursor-pointer">
             <option value="">👑 Admin ({allUsersList.length})</option>
-            {allUsersList.map((u) => (
-              <option key={u.email} value={u.email}>👁️ Xem: {u.name} ({u.email})</option>
-            ))}
+            {allUsersList.map((u) => <option key={u.email} value={u.email}>👁️ Xem: {u.name} ({u.email})</option>)}
           </select>
         )}
       </div>
 
       <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
-        <button
-          type="button"
-          onClick={() => setShowAdminModal(true)}
-          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
-        >
+        <button type="button" onClick={() => setShowAdminModal(true)}
+          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
           {meUser.isAdmin ? '👑 Quản trị & Co-work' : '⚙️ Co-work & PIN'}
         </button>
-        <button
-          type="button"
-          onClick={handleLogout}
-          title="Đăng xuất Gmail"
-          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100"
-        >
+        <button type="button" onClick={handleLogout} title="Đăng xuất Gmail"
+          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100">
           <Icon name="logout" size={13} /> Thoát
         </button>
       </div>
