@@ -23,17 +23,52 @@
     window.SUPA_URL  = 'https://bxcroowxyxndqeqeecjz.supabase.co';
     window.SUPA_KEY  = 'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V';
     // ─────────────────────────────────────────────────────────────────
-    // Chặn pinch-to-zoom trên iOS Safari
     ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
       document.addEventListener(name, function (e) { e.preventDefault(); }, { passive: false });
     });
-    // Khởi tạo Supabase client. App vẫn chạy offline nếu CDN lỗi.
     window.supabaseClient = null;
     try {
       window.supabaseClient = window.supabase.createClient(window.SUPA_URL, window.SUPA_KEY);
     } catch (e) {
       console.error('Không khởi tạo được Supabase:', e);
     }
+
+    // ── CÔNG NGHỆ MỚI 1: WEB WORKER MÃ HÓA AES-256 ĐA LUỒNG (CHỐNG ĐƠ UI) ──
+    window.encryptVaultAsync = function (plainStr, secret) {
+      if (!window.Worker) {
+        return Promise.resolve(CryptoJS.AES.encrypt(plainStr, secret).toString());
+      }
+      if (!window._cryptoWorker) {
+        const workerCode = `
+          importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js');
+          self.onmessage = function(e) {
+            const { id, plainStr, secret } = e.data;
+            try {
+              const cipher = CryptoJS.AES.encrypt(plainStr, secret).toString();
+              self.postMessage({ id, cipher });
+            } catch (err) {
+              self.postMessage({ id, error: err.message });
+            }
+          };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        window._cryptoWorker = new Worker(URL.createObjectURL(blob));
+        window._cryptoCallbacks = {};
+        window._cryptoWorker.onmessage = function (e) {
+          const { id, cipher, error } = e.data;
+          if (window._cryptoCallbacks[id]) {
+            if (error) window._cryptoCallbacks[id].reject(new Error(error));
+            else window._cryptoCallbacks[id].resolve(cipher);
+            delete window._cryptoCallbacks[id];
+          }
+        };
+      }
+      return new Promise((resolve, reject) => {
+        const id = Math.random().toString(36).slice(2);
+        window._cryptoCallbacks[id] = { resolve, reject };
+        window._cryptoWorker.postMessage({ id, plainStr, secret });
+      });
+    };
   </script>
 
   <script>
@@ -61,7 +96,6 @@
       font-size: 14px; -webkit-text-size-adjust: 100%;
       overscroll-behavior-x: none; touch-action: manipulation;
     }
-    /* Chế độ app (iPhone): khóa trang, chỉ vùng nội dung bên trong được cuộn dọc */
     html.lock { overflow: hidden; height: 100%; }
     body.lock { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: pan-y; }
     .app-scroll {
@@ -69,7 +103,6 @@
       -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-width: none;
     }
     .app-scroll::-webkit-scrollbar { display: none; }
-    /* Ngăn iOS tự động zoom khi chạm vào ô input có font < 16px */
     @media screen and (max-width: 768px) {
       input, select, textarea { font-size: 16px !important; }
     }
@@ -124,7 +157,7 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const { useState, useEffect, useMemo, useRef, useCallback, memo } = React;
 
 const KEY = 'wealthos-multiuser-v3';
 const LEGACY_KEY = 'wealthos-gia-san-data-v2';
@@ -135,13 +168,11 @@ const THEME_KEY = 'wealthos-theme';
 const CLOUD_SECRET = 'wealthos-e2ee-master-vault-2026';
 const MAX_HISTORY = 180;
 
+// ── CÔNG NGHỆ MỚI 2: INTL.NUMBERFORMAT SINGLETON (TĂNG TỐC FORMAT SỐ 5 LẦN) ──
+const NF = new Intl.NumberFormat('vi-VN');
 const uid = () => Math.random().toString(36).slice(2, 9);
 const num = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
-const fmt = (n) => {
-  const v = Math.round(num(n));
-  const s = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return (v < 0 ? '-' : '') + s;
-};
+const fmt = (n) => NF.format(Math.round(num(n)));
 const vnd = (n) => fmt(n) + ' ₫';
 const trim2 = (x) => String(Math.round(x * 100) / 100).replace('.', ',');
 const fixed2 = (x) => x.toFixed(2).replace('.', ',');
@@ -300,7 +331,6 @@ function normalizeData(raw) {
   return out;
 }
 
-// GỘP DỮ LIỆU 2 VỢ CHỒNG (CO-WORK COMBINED DATA)
 function mergeCoupleData(u1Data, u2Data, u1Name, u2Name, u1Email, u2Email) {
   const d1 = normalizeData(u1Data);
   const d2 = normalizeData(u2Data);
@@ -356,21 +386,18 @@ function compute(d) {
     return { ...g, assets, debt: d.debts[g.key], equity: assets - d.debts[g.key] };
   });
   return {
-    stockTotal,
-    goldTotal,
-    bankTotal,
-    actual,
-    total,
-    debt,
-    net,
-    pct,
-    spent,
-    groups,
-    fireTarget,
+    stockTotal, goldTotal, bankTotal, actual, total, debt, net, pct, spent, groups, fireTarget,
     surplus: d.income - spent,
     firePct: fireTarget > 0 ? Math.max(0, (net / fireTarget) * 100) : 0,
     targetSum: sum(CLASSES, (c) => d.targets[c.key])
   };
+}
+
+function simulatePrice(r) {
+  if (!(r.price > 0)) return r;
+  const move = (0.01 + Math.random() * 0.02) * (Math.random() < 0.5 ? -1 : 1);
+  const next = Math.max(10, Math.round((r.price * (1 + move)) / 10) * 10);
+  return { ...r, price: next, dir: next >= r.price ? 1 : -1 };
 }
 
 /* ══════════════════════════════════════════════════
@@ -451,8 +478,7 @@ function NetWorthChart({ history }) {
           <p className="text-slate-500 tnum">TS: {compact(hd.total)} · Nợ: {compact(hd.debt)}</p>
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{maxHeight: 180}}
-        onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{maxHeight: 180}} onMouseLeave={() => setHover(null)}>
         <defs>
           <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18" />
@@ -473,15 +499,14 @@ function NetWorthChart({ history }) {
         {pts.map(([x, y], i) => (
           <circle key={i} cx={x} cy={y} r={hover === i ? 5 : 3}
             fill={hover === i ? '#4f46e5' : 'white'} stroke="#4f46e5" strokeWidth="1.5"
-            style={{cursor:'pointer'}}
-            onMouseEnter={() => setHover(i)} />
+            style={{cursor:'pointer'}} onMouseEnter={() => setHover(i)} />
         ))}
       </svg>
     </div>
   );
 }
 
-function NetWorthCard({ history }) {
+const NetWorthCard = memo(function NetWorthCard({ history }) {
   const [period, setPeriod] = useState('all');
   const now = useMemo(() => new Date(TODAY), []);
   const filtered = useMemo(() => {
@@ -491,10 +516,8 @@ function NetWorthCard({ history }) {
     return history.filter(h => parseISO(h.date) >= cutoff);
   }, [history, period, now]);
 
-  const change = filtered.length >= 2
-    ? filtered[filtered.length-1].net - filtered[0].net : 0;
-  const changePct = filtered.length >= 2 && filtered[0].net !== 0
-    ? (change / Math.abs(filtered[0].net)) * 100 : 0;
+  const change = filtered.length >= 2 ? filtered[filtered.length-1].net - filtered[0].net : 0;
+  const changePct = filtered.length >= 2 && filtered[0].net !== 0 ? (change / Math.abs(filtered[0].net)) * 100 : 0;
 
   return (
     <Card
@@ -524,7 +547,7 @@ function NetWorthCard({ history }) {
       <NetWorthChart history={filtered} />
     </Card>
   );
-}
+});
 
 /* ══════════════════════════════════════════════════
    DARK MODE TOGGLE
@@ -575,4 +598,2275 @@ const ICONS = {
   pie: 'M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z',
   wallet: 'M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4z',
   target: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0zM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
-  moon
+  moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+  print: 'M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z',
+  lock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 10 0v4',
+  users: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
+};
+
+function Icon({ name, size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={ICONS[name] || ''} />
+    </svg>
+  );
+}
+
+function sanitizeDec(raw) {
+  let seen = false, out = '';
+  for (const ch of raw) {
+    if (ch === ',' || ch === '.') { if (!seen) { seen = true; out += ','; } }
+    else if (ch >= '0' && ch <= '9') out += ch;
+  }
+  return out;
+}
+
+function NumInput({ value, onChange, decimal = false, className = '', placeholder = '0', id, ariaLabel, blankZero = false }) {
+  const toTxt = (v) => (decimal ? String(num(v)).replace('.', ',') : (num(v) === 0 ? (blankZero ? '' : '0') : fmt(v)));
+  const parse = (t) => (decimal ? num(t.replace(',', '.')) : num(t.replace(/\D/g, '')));
+  const [txt, setTxt] = useState(toTxt(value));
+  useEffect(() => { if (parse(txt) !== num(value)) setTxt(toTxt(value)); }, [value]);
+  const handle = (e) => {
+    const raw = e.target.value;
+    if (decimal) {
+      const t = sanitizeDec(raw);
+      setTxt(t);
+      onChange(parse(t));
+    } else {
+      const digits = raw.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+      setTxt(digits === '' ? '' : fmt(Number(digits)));
+      onChange(digits === '' ? 0 : Number(digits));
+    }
+  };
+  return <input id={id} aria-label={ariaLabel} type="text" inputMode={decimal ? 'decimal' : 'numeric'} value={txt} onChange={handle} placeholder={placeholder} className={className} autoComplete="off" />;
+}
+
+const CELL = 'w-full bg-transparent rounded-md px-1.5 py-1 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white outline-none tnum text-right';
+const CELL_L = 'w-full bg-transparent rounded-md px-1.5 py-1 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white outline-none text-left';
+const BOXED = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
+const FIELD = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:bg-white';
+
+function Money({ v, className = '' }) {
+  return <span title={vnd(v)} className={`tnum cursor-help ${className}`}>{compact(v)}</span>;
+}
+
+function Card({ title, right, className = '', children }) {
+  return (
+    <section className={`bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-5 min-w-0 ${className}`}>
+      <div className="flex items-start justify-between gap-2 mb-4">
+        <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</h2>
+        <div className="flex items-center gap-1.5">{right}</div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Bar({ pct, color, h = 'h-2', label }) {
+  return (
+    <div className={`${h} rounded-full bg-slate-100 overflow-hidden`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(100, Math.max(0, pct)))} aria-label={label}>
+      <div className="h-full rounded-full transition-all" style={{ width: Math.min(100, Math.max(0, pct)) + '%', background: color }} />
+    </div>
+  );
+}
+
+function ProgressRow({ lead, title, sub, valueText, valueTitle, pctText, pct, color }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {lead}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-800 truncate">{title}</p>
+            {sub && <p className="text-[11px] text-slate-500 truncate">{sub}</p>}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-bold text-slate-900 tnum" title={valueTitle}>{valueText}</p>
+          {pctText && <p className="text-[11px] font-semibold text-slate-500 tnum">{pctText}</p>}
+        </div>
+      </div>
+      <div className="mt-2"><Bar pct={pct} color={color} label={title} /></div>
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, children, color = '#4f46e5', small = false }) {
+  return (
+    <button type="button" role="tab" aria-selected={active} onClick={onClick}
+      className={`${small ? 'text-[11px] px-2.5 py-1' : 'text-xs px-3.5 py-1.5'} font-bold rounded-lg transition whitespace-nowrap ${active ? 'text-white shadow-sm' : 'text-slate-600 bg-slate-100 hover:bg-slate-200'}`}
+      style={active ? { background: color } : undefined}>{children}</button>
+  );
+}
+
+function IconBtn({ onClick, label, icon, tone = 'slate' }) {
+  const t = tone === 'rose' ? 'hover:text-rose-600 hover:bg-rose-50' : 'hover:text-indigo-600 hover:bg-indigo-50';
+  return <button type="button" onClick={onClick} aria-label={label} title={label} className={`p-1 rounded-md text-slate-400 transition ${t}`}><Icon name={icon} size={14} /></button>;
+}
+
+const Kpi = memo(function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '', small = false }) {
+  return (
+    <div className={`rounded-2xl border p-4 min-w-0 ${dark ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-900'} ${className}`}>
+      <p className={`text-[10px] font-bold uppercase tracking-wider ${dark ? 'text-indigo-200' : 'text-slate-500'}`}>{label}</p>
+      <div className={`${small ? 'text-[19px]' : 'text-2xl'} font-extrabold tnum mt-1 leading-tight`}>{children}</div>
+      <p className={`text-xs mt-1 truncate tnum ${dark ? 'text-slate-300' : 'text-slate-500'}`}>{sub}</p>
+      {bar !== undefined && (
+        <div className={`h-1.5 rounded-full mt-2.5 overflow-hidden ${dark ? 'bg-white/15' : 'bg-slate-100'}`}>
+          <div className="h-full rounded-full" style={{ width: Math.min(100, bar) + '%', background: barColor }} />
+        </div>
+      )}
+      {extra}
+    </div>
+  );
+});
+
+function TableLayout({ heads, isEmpty, empty, foot, children }) {
+  return (
+    <div className="overflow-x-auto thin-scroll">
+      <table className="w-full text-xs min-w-[640px]">
+        <thead>
+          <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+            {heads.map((h, i) => <th key={i} className={`px-2 py-2 whitespace-nowrap ${h.a === 'l' ? 'text-left' : 'text-right'}`}>{h.t}{h.t === '' && <span className="sr-only">Xóa</span>}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {isEmpty && <tr><td colSpan={heads.length} className="px-3 py-10 text-center text-slate-400">{empty}</td></tr>}
+          {children}
+        </tbody>
+        {!isEmpty && foot && <tfoot>{foot}</tfoot>}
+      </table>
+    </div>
+  );
+}
+
+function Pnl({ amount, p }) {
+  const cls = amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-500';
+  const sign = amount > 0 ? '+' : '';
+  return (
+    <div className={`text-right tnum leading-tight ${cls}`}>
+      <div className="font-semibold">{sign}<Money v={amount} /></div>
+      <div className="text-[10px]">({sign}{pcv(p)})</div>
+    </div>
+  );
+}
+
+function Countdown({ days }) {
+  if (days < 0) return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700">Quá hạn {Math.abs(days)} ngày</span>;
+  if (days <= 30) return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Còn {days} ngày</span>;
+  return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700">Còn {days} ngày</span>;
+}
+
+const DonutChart = memo(function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
+  const [hv, setHv] = useState(null);
+  const aSum = CLASSES.reduce((s, c) => s + Math.max(0, actual[c.key]), 0);
+  const tSum = CLASSES.reduce((s, c) => s + Math.max(0, targets[c.key]), 0);
+  const rings = [
+    { id: 'out', r: 86, sw: 24, sum: aSum, items: CLASSES.map((c) => ({ c, v: Math.max(0, actual[c.key]) })) },
+    { id: 'in', r: 57, sw: 18, sum: tSum, items: CLASSES.map((c) => ({ c, v: Math.max(0, targets[c.key]) })) },
+  ];
+  let info = null;
+  if (hv) {
+    const c = CLASSES.find((x) => x.key === hv.key);
+    info = hv.ring === 'out'
+      ? { head: 'Thực tế', label: c.label, amount: actual[c.key], p: aSum > 0 ? (actual[c.key] / aSum) * 100 : 0, color: c.ink }
+      : { head: 'Mục tiêu', label: c.label, amount: (total * targets[c.key]) / 100, p: targets[c.key], color: c.ink };
+  }
+  return (
+    <svg viewBox="0 0 220 220" className={`${size} shrink-0`} role="img" aria-label="Donut kép: vòng ngoài thực tế, vòng trong mục tiêu">
+      {rings.map((ring) => {
+        const C = 2 * Math.PI * ring.r;
+        let acc = 0;
+        return (
+          <g key={ring.id}>
+            <circle cx="110" cy="110" r={ring.r} fill="none" stroke="#e2e8f0" strokeWidth={ring.sw} />
+            {ring.sum > 0 && ring.items.map(({ c, v }) => {
+              const len = (v / ring.sum) * C;
+              const off = acc;
+              acc += len;
+              if (len <= 0) return null;
+              const dim = hv && !(hv.ring === ring.id && hv.key === c.key);
+              return (
+                <circle key={c.key} cx="110" cy="110" r={ring.r} fill="none" stroke={c.color} strokeWidth={ring.sw}
+                  strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off} transform="rotate(-90 110 110)"
+                  style={{ opacity: dim ? 0.3 : 1, cursor: 'pointer', transition: 'opacity .15s' }}
+                  onMouseEnter={() => setHv({ ring: ring.id, key: c.key })} onMouseLeave={() => setHv(null)}
+                  onClick={() => setHv((h) => (h && h.ring === ring.id && h.key === c.key ? null : { ring: ring.id, key: c.key }))}>
+                  <title>{`${ring.id === 'out' ? 'Thực tế' : 'Mục tiêu'} · ${c.label}: ${pcv((v / ring.sum) * 100, 0)}`}</title>
+                </circle>
+              );
+            })}
+          </g>
+        );
+      })}
+      {info ? (
+        <g textAnchor="middle" style={{ pointerEvents: 'none' }}>
+          <text x="110" y="94" fontSize="12" fill="#64748b" fontWeight="600">{info.head}</text>
+          <text x="110" y="110" fontSize="13" fill={info.color} fontWeight="700">{info.label}</text>
+          <text x="110" y="128" fontSize="16" fill="#0f172a" fontWeight="800">{compact(info.amount)}</text>
+          <text x="110" y="143" fontSize="12" fill="#475569" fontWeight="600">{pcv(info.p, 0)}</text>
+        </g>
+      ) : (
+        <g textAnchor="middle" style={{ pointerEvents: 'none' }}>
+          <text x="110" y="102" fontSize="12" fill="#64748b" fontWeight="600">Tổng TS</text>
+          <text x="110" y="124" fontSize="19" fill="#0f172a" fontWeight="800">{compact(total)}</text>
+        </g>
+      )}
+    </svg>
+  );
+});
+
+const AllocationCard = memo(function AllocationCard({ data, setData, c, view }) {
+  const setTarget = (k, v) => setData((d) => ({ ...d, targets: { ...d.targets, [k]: v } }));
+  const targetOk = Math.abs(c.targetSum - 100) < 0.001;
+  const autos = { stock: c.stockTotal, gold: c.goldTotal, bank: c.bankTotal };
+  const entry = {
+    cash: [data.cash, (v) => setData((d) => ({ ...d, cash: v }))],
+    recv: [data.receivable, (v) => setData((d) => ({ ...d, receivable: v }))],
+    estate: [data.estate, (v) => setData((d) => ({ ...d, estate: v }))]
+  };
+  const mode = data.recMode;
+  const S = c.surplus;
+  const rows = CLASSES.map((cl) => {
+    const target = (c.total * data.targets[cl.key]) / 100;
+    return { cl, actual: c.actual[cl.key], target, diff: target - c.actual[cl.key] };
+  });
+  let monthly = rows.map(() => 0);
+  if (mode === 'monthly' && S > 0) {
+    const newTotal = c.total + S;
+    const gaps = CLASSES.map((cl) => Math.max(0, (newTotal * data.targets[cl.key]) / 100 - c.actual[cl.key]));
+    const gapSum = gaps.reduce((a, b) => a + b, 0);
+    monthly = gaps.map((g) => (gapSum > 0 ? (g * S) / gapSum : 0));
+  }
+  const shown = rows.map((r, i) => ({ ...r, i })).filter((r) => r.actual > 0 || r.target > 0);
+  return (
+    <Card title="Cơ cấu danh mục đầu tư" right={<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${targetOk ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`} role={targetOk ? undefined : 'alert'}>MỤC TIÊU: {pcv(c.targetSum, Number.isInteger(c.targetSum) ? 0 : 1)}</span>}>
+      <div className="flex justify-center"><DonutChart actual={c.actual} targets={data.targets} total={c.total} /></div>
+      <p className="text-[10px] text-center text-slate-400 mt-1 mb-3">Vòng ngoài: thực tế · Vòng trong: mục tiêu</p>
+      <div className={`grid ${view === 'phone' ? 'grid-cols-[10px_minmax(0,1fr)_92px_34px_46px]' : 'grid-cols-[10px_minmax(0,1fr)_112px_40px_52px]'} items-center gap-x-2 gap-y-1.5 text-xs`}>
+        <span /><span /><span className="text-[10px] font-semibold text-slate-400 text-right">Giá trị (₫)</span><span className="text-[10px] font-semibold text-slate-400 text-right">TT</span><span className="text-[10px] font-semibold text-slate-400 text-right">MT %</span>
+        {CLASSES.map((cl) => (
+          <React.Fragment key={cl.key}>
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: cl.color }} aria-hidden="true" />
+            {cl.key === 'estate'
+              ? <input id="estate-name" aria-label="Tên bất động sản" value={data.estateName} placeholder="Bất động sản" onChange={(e) => setData((d) => ({ ...d, estateName: e.target.value }))} className={`${CELL_L} font-semibold text-slate-700 min-w-0`} />
+              : <span className="font-semibold text-slate-700 truncate" title={cl.label}>{cl.label}</span>}
+            {cl.key in autos
+              ? <Money v={autos[cl.key]} className="text-right font-bold text-slate-900" />
+              : <NumInput id={`bs-${cl.key}`} ariaLabel={`Giá trị ${cl.label}`} value={entry[cl.key][0]} onChange={entry[cl.key][1]} className="w-full bg-slate-50 rounded-md border border-slate-200 px-1.5 py-0.5 text-right font-bold tnum outline-none focus:border-indigo-400 focus:bg-white" />}
+            <span className="text-right tnum text-slate-600">{pcv(c.pct[cl.key], 0)}</span>
+            <NumInput id={`tg-${cl.key}`} ariaLabel={`Mục tiêu ${cl.label}`} decimal value={data.targets[cl.key]} onChange={(v) => setTarget(cl.key, v)} className="w-full bg-slate-50 rounded-md border border-slate-200 px-1 py-0.5 text-right font-bold tnum outline-none focus:border-indigo-400 focus:bg-white" />
+          </React.Fragment>
+        ))}
+      </div>
+      <p className="text-[10px] text-slate-400 mt-1.5">Cổ phiếu, vàng, tiền gửi tự cộng từ bảng nhập danh mục bên dưới.</p>
+
+      <div className="mt-4 pt-4 border-t border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Lệch so với mục tiêu</h3>
+          <div role="tablist" aria-label="Chế độ khuyến nghị" className="flex gap-1">
+            <TabButton small active={mode === 'rebalance'} onClick={() => setData((d) => ({ ...d, recMode: 'rebalance' }))}>Tái cân bằng</TabButton>
+            <TabButton small active={mode === 'monthly'} onClick={() => setData((d) => ({ ...d, recMode: 'monthly' }))}>Từ thặng dư</TabButton>
+          </div>
+        </div>
+        {mode === 'monthly' && <p className="text-[11px] text-slate-500 mb-2">Chia thặng dư <Money v={S} className="font-bold text-slate-700" />/tháng để mua thêm, không bán tài sản đang có.</p>}
+        <ul className="space-y-1.5">
+          {shown.map((r) => {
+            let body, tone;
+            if (mode === 'rebalance') {
+              if (r.diff >= 1) { body = <>Cần bổ sung <Money v={r.diff} className="font-bold" /> {r.cl.label}</>; tone = 'bg-emerald-50 text-emerald-800'; }
+              else if (r.diff <= -1) { body = <>Cần giảm <Money v={-r.diff} className="font-bold" /> {r.cl.label}</>; tone = 'bg-amber-50 text-amber-800'; }
+              else { body = <>{r.cl.label} đúng mục tiêu</>; tone = 'bg-slate-50 text-slate-600'; }
+            } else if (monthly[r.i] >= 1) {
+              body = <>Mua thêm <Money v={monthly[r.i]} className="font-bold" />/tháng {r.cl.label}</>; tone = 'bg-emerald-50 text-emerald-800';
+            } else {
+              body = <>{r.cl.label} đã đủ, tạm dừng bổ sung</>; tone = 'bg-slate-50 text-slate-600';
+            }
+            return (
+              <li key={r.cl.key} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${tone}`}>
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: r.cl.color }} aria-hidden="true" />
+                <span className="flex-1 min-w-0">{body}</span>
+              </li>
+            );
+          })}
+          {shown.length === 0 && <li className="text-xs text-slate-400 py-2">Nhập giá trị tài sản để xem độ lệch.</li>}
+        </ul>
+        {mode === 'monthly' && S <= 0 && <p className="text-[11px] text-amber-700 mt-2">Thặng dư ≤ 0 nên chưa có khoản nào để phân bổ.</p>}
+      </div>
+    </Card>
+  );
+});
+
+/* ---------- Nhận định tự động ---------- */
+const TONES = {
+  good: { dot: 'bg-emerald-500', head: 'text-emerald-700' },
+  info: { dot: 'bg-indigo-500', head: 'text-indigo-700' },
+  warn: { dot: 'bg-amber-500', head: 'text-amber-700' },
+  bad: { dot: 'bg-rose-500', head: 'text-rose-700' },
+};
+function Insight({ items, title = 'Nhận định' }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700 mb-2"><Icon name="sparkles" size={13} />{title}</div>
+      <ul className="space-y-1.5">
+        {items.map((it, i) => (
+          <li key={i} className="flex gap-2 text-xs leading-relaxed text-slate-700">
+            <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${TONES[it.tone].dot}`} aria-hidden="true" />
+            <span className="min-w-0"><b className={TONES[it.tone].head}>{it.head}</b> {it.body}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function topAssetInsights(items, c, data) {
+  const out = [];
+  if (!items.length || c.total <= 0) return out;
+  const top = items[0];
+  const t1 = (top.value / c.total) * 100;
+  const t3 = (sum(items.slice(0, 3), (a) => a.value) / c.total) * 100;
+  if (t1 >= 50) out.push({ tone: 'warn', head: 'Tập trung cao.', body: `${top.name} chiếm ${pcv(t1, 0)} tổng tài sản. Nếu tài sản này mất 10% giá trị, tổng tài sản giảm ${pcv(t1 / 10, 1)}.` });
+  else if (t1 >= 30) out.push({ tone: 'info', head: 'Khá tập trung.', body: `${top.name} chiếm ${pcv(t1, 0)}, top 3 chiếm ${pcv(t3, 0)} tổng tài sản.` });
+  else out.push({ tone: 'good', head: 'Phân tán tốt.', body: `Tài sản lớn nhất chỉ chiếm ${pcv(t1, 0)}, top 3 chiếm ${pcv(t3, 0)} tổng tài sản.` });
+  if (data.estate > 0 && data.debts.fixed > 0) {
+    const ltv = (data.debts.fixed / data.estate) * 100;
+    out.push({ tone: ltv > 70 ? 'bad' : ltv > 50 ? 'warn' : 'info', head: 'Đòn bẩy bất động sản.', body: `Vay thế chấp bằng ${pcv(ltv, 0)} giá trị ${data.estateName || 'bất động sản'}. Phần sở hữu thực còn ${compact(data.estate - data.debts.fixed)}.` });
+  }
+  const liquid = c.actual.stock + c.actual.gold + c.actual.bank + c.actual.cash;
+  const lp = (liquid / c.total) * 100;
+  out.push({ tone: lp >= 40 ? 'good' : lp >= 20 ? 'info' : 'warn', head: 'Thanh khoản.', body: `${pcv(lp, 0)} tài sản (${compact(liquid)}) quy ra tiền được trong vài ngày, ${pcv(100 - lp, 0)} nằm ở tài sản khó bán nhanh.` });
+  if (c.pct.recv >= 10) out.push({ tone: 'warn', head: 'Nợ phải đòi.', body: `Chiếm ${pcv(c.pct.recv, 0)} tổng tài sản. Nên chốt thời hạn thu hồi để tránh tiền bị treo.` });
+  return out;
+}
+
+function spendingInsights(data, c) {
+  const out = [];
+  if (data.income > 0) {
+    const sr = (c.surplus / data.income) * 100;
+    if (c.surplus < 0) out.push({ tone: 'bad', head: 'Chi vượt thu.', body: `Mỗi tháng âm ${compact(-c.surplus)}, tài sản đang bị bào mòn. Cần cắt chi hoặc tăng thu ngay.` });
+    else if (sr >= 30) out.push({ tone: 'good', head: 'Tiết kiệm xuất sắc.', body: `Giữ lại ${pcv(sr, 0)} thu nhập (${compact(c.surplus)}/tháng), vượt xa mốc 20% thường được khuyến nghị.` });
+    else if (sr >= 20) out.push({ tone: 'good', head: 'Tiết kiệm tốt.', body: `Giữ lại ${pcv(sr, 0)} thu nhập (${compact(c.surplus)}/tháng), đạt mốc 20% khuyến nghị.` });
+    else if (sr >= 10) out.push({ tone: 'warn', head: 'Tiết kiệm trung bình.', body: `Mới giữ lại ${pcv(sr, 0)} thu nhập. Cần thêm ${compact(data.income * 0.2 - c.surplus)}/tháng để chạm mốc 20%.` });
+    else out.push({ tone: 'warn', head: 'Tiết kiệm thấp.', body: `Chỉ giữ lại ${pcv(sr, 0)} thu nhập (${compact(c.surplus)}/tháng). Nên rà lại nhóm chi lớn nhất.` });
+  }
+  if (data.budget > 0) {
+    const u = (c.spent / data.budget) * 100;
+    if (u > 100) out.push({ tone: 'bad', head: 'Vượt ngân sách.', body: `Chi ${compact(c.spent)} so với ngân sách ${compact(data.budget)}, vượt ${compact(c.spent - data.budget)} (${pcv(u - 100, 0)}).` });
+    else if (u >= 85) out.push({ tone: 'warn', head: 'Sát ngân sách.', body: `Đã dùng ${pcv(u, 0)} ngân sách, còn ${compact(data.budget - c.spent)}.` });
+    else out.push({ tone: 'good', head: 'Trong ngân sách.', body: `Đã dùng ${pcv(u, 0)} ngân sách, còn dư ${compact(data.budget - c.spent)}.` });
+  }
+  const cats = data.categories.map((k) => ({ name: k.name || '(chưa đặt tên)', v: catTotal(k) })).filter((k) => k.v > 0).sort((a, b) => b.v - a.v);
+  if (cats.length >= 2 && c.spent > 0) {
+    const sh = (cats[0].v / c.spent) * 100;
+    out.push({ tone: sh >= 55 ? 'warn' : 'info', head: 'Nhóm chi lớn nhất.', body: `${cats[0].name} chiếm ${pcv(sh, 0)} chi tiêu (${compact(cats[0].v)}/tháng)${sh >= 55 ? ', nên xem có khoản nào cắt được.' : '.'}` });
+  }
+  if (c.spent > 0) {
+    const m = (c.bankTotal + data.cash) / c.spent;
+    out.push({ tone: m >= 6 ? 'good' : m >= 3 ? 'info' : 'warn', head: 'Quỹ dự phòng.', body: `Tiền gửi + tiền mặt đủ chi ${trim2(m)} tháng (chuẩn khuyến nghị 6 tháng).` });
+    out.push({ tone: 'info', head: 'Tác động tới FIRE.', body: `Theo quy tắc 25 lần chi tiêu năm, mục tiêu FIRE là ${compact(c.spent * 300)}. Cắt thêm 1 triệu/tháng sẽ giảm mục tiêu này 300 triệu.` });
+  }
+  return out;
+}
+
+function portfolioInsights(tabKey, data, c) {
+  const out = [];
+  const cls = tabKey === 'stocks' ? 'stock' : tabKey === 'gold' ? 'gold' : 'bank';
+  const rows = data[tabKey];
+  const label = { stocks: 'cổ phiếu', gold: 'vàng', savings: 'tiền gửi' }[tabKey];
+  if (rows.length === 0) return [{ tone: 'info', head: 'Chưa có dữ liệu.', body: `Thêm ${label} để xem nhận định về danh mục.` }];
+  const gap = c.pct[cls] - data.targets[cls];
+  const gapText = Math.abs(gap) <= 2 ? ', đang cân đối.' : gap < 0 ? `, thiếu ${pcv(-gap, 0)} (khoảng ${compact((-gap / 100) * c.total)}).` : `, vượt ${pcv(gap, 0)} (khoảng ${compact((gap / 100) * c.total)}).`;
+  out.push({ tone: Math.abs(gap) <= 2 ? 'good' : 'warn', head: 'Tỷ trọng nhóm.', body: `${label.charAt(0).toUpperCase() + label.slice(1)} chiếm ${pcv(c.pct[cls], 0)} tổng tài sản so với mục tiêu ${pcv(data.targets[cls], 0)}${gapText}` });
+
+  if (tabKey === 'stocks') {
+    const list = rows.filter((r) => r.qty > 0 && r.price > 0);
+    if (list.length === 0) return out;
+    const tv = sum(list, (r) => r.qty * r.price), cost = sum(list, (r) => r.qty * r.cost), pnl = tv - cost;
+    out.push({ tone: pnl >= 0 ? 'good' : 'warn', head: 'Hiệu suất.', body: `${pnl >= 0 ? 'Lãi' : 'Lỗ'} ${compact(Math.abs(pnl))} (${pcv(cost > 0 ? (pnl / cost) * 100 : 0)}) so với giá vốn ${compact(cost)}.` });
+    const ranked = list.filter((r) => r.cost > 0).map((r) => ({ code: r.code || '?', p: ((r.price - r.cost) / r.cost) * 100 })).sort((a, b) => b.p - a.p);
+    if (ranked.length >= 2) {
+      const b = ranked[0], w = ranked[ranked.length - 1];
+      out.push({ tone: w.p < 0 ? 'warn' : 'info', head: 'Mã nổi bật.', body: `${b.code} tốt nhất (${b.p >= 0 ? '+' : ''}${pcv(b.p)}), ${w.code} yếu nhất (${w.p >= 0 ? '+' : ''}${pcv(w.p)})${w.p < 0 ? '. Nên xem lại luận điểm đầu tư của mã này.' : '.'}` });
+    }
+    const top = list.slice().sort((a, b) => b.qty * b.price - a.qty * a.price)[0];
+    const ts = ((top.qty * top.price) / tv) * 100;
+    if (list.length >= 2 && ts >= 50) out.push({ tone: 'warn', head: 'Tập trung một mã.', body: `${top.code || '?'} chiếm ${pcv(ts, 0)} giá trị cổ phiếu, rủi ro riêng lẻ cao.` });
+    const gaps = list.map((r) => { const a = ((r.qty * r.price) / tv) * 100; return { code: r.code || '?', a, t: r.target, d: a - r.target }; }).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+    if (gaps[0] && Math.abs(gaps[0].d) >= 5) out.push({ tone: 'info', head: 'Lệch target.', body: `${gaps[0].code} đang ${pcv(gaps[0].a, 0)} so với target ${pcv(gaps[0].t, 0)}, nên ${gaps[0].d > 0 ? 'giảm' : 'tăng'} khoảng ${compact((Math.abs(gaps[0].d) / 100) * tv)}.` });
+    const tsum = sum(rows, (r) => r.target);
+    if (Math.abs(tsum - 100) > 0.001) out.push({ tone: 'warn', head: 'Tổng % target.', body: `Đang là ${pcv(tsum, 0)}, cần chỉnh về 100% để tính độ lệch chính xác.` });
+    if (data.debts.risk > 0) out.push({ tone: 'warn', head: 'Đang vay margin.', body: `Dư nợ ${compact(data.debts.risk)} bằng ${pcv(c.stockTotal > 0 ? (data.debts.risk / c.stockTotal) * 100 : 0, 0)} giá trị cổ phiếu. Lãi vay sẽ ăn vào lợi nhuận khi thị trường đi ngang.` });
+  } else if (tabKey === 'gold') {
+    const list = rows.filter((r) => r.qty > 0 && r.price > 0);
+    if (list.length === 0) return out;
+    const qty = sum(list, (r) => r.qty), tv = sum(list, (r) => r.qty * r.price), cost = sum(list, (r) => r.qty * r.cost), pnl = tv - cost;
+    out.push({ tone: pnl >= 0 ? 'good' : 'warn', head: 'Hiệu suất.', body: `Nắm giữ ${trim2(qty)} chỉ, ${pnl >= 0 ? 'lãi' : 'lỗ'} ${compact(Math.abs(pnl))} (${pcv(cost > 0 ? (pnl / cost) * 100 : 0)}) so với giá vốn.` });
+    out.push({ tone: 'info', head: 'Giá bình quân.', body: `Giá vốn bình quân ${compact(cost / qty)}/chỉ, giá hiện tại bình quân ${compact(tv / qty)}/chỉ.` });
+    out.push({ tone: 'info', head: 'Vai trò của vàng.', body: 'Vàng không sinh lãi, vai trò là giữ giá trị. Chỉ nên mua thêm khi tỷ trọng đang thấp hơn mục tiêu.' });
+    const tsum = sum(rows, (r) => r.target);
+    if (Math.abs(tsum - 100) > 0.001) out.push({ tone: 'warn', head: 'Tổng % target.', body: `Đang là ${pcv(tsum, 0)}, cần chỉnh về 100% để tính độ lệch chính xác.` });
+  } else {
+    const list = rows.filter((r) => r.principal > 0);
+    if (list.length === 0) return out;
+    const tp = sum(list, (r) => r.principal);
+    const avg = sum(list, (r) => r.principal * r.rate) / tp;
+    const interest = sum(list, (r) => (r.principal * r.rate * r.term) / 1200);
+    out.push({ tone: 'info', head: 'Lãi suất bình quân.', body: `${pcv(avg, 2)}/năm trên ${compact(tp)} gốc, lãi dự kiến cả kỳ ${compact(interest)}.` });
+    const m = list.map((r) => ({ r, d: daysBetween(TODAY, addMonths(parseISO(r.start), Math.round(r.term))) })).sort((a, b) => a.d - b.d)[0];
+    const nm = m.r.bank || '(chưa đặt tên)';
+    if (m.d < 0) out.push({ tone: 'bad', head: 'Đã quá hạn.', body: `Sổ ${nm} quá hạn ${-m.d} ngày, nên tất toán hoặc tái tục sớm.` });
+    else if (m.d <= 30) out.push({ tone: 'warn', head: 'Sắp đáo hạn.', body: `Sổ ${nm} còn ${m.d} ngày, cần quyết định tái tục hay rút ra để đầu tư.` });
+    else out.push({ tone: 'good', head: 'Lịch đáo hạn.', body: `Sổ gần nhất (${nm}) đáo hạn sau ${m.d} ngày, chưa cần xử lý gấp.` });
+    const topB = list.slice().sort((a, b) => b.principal - a.principal)[0];
+    const bs = (topB.principal / tp) * 100;
+    if (list.length >= 2 && bs >= 60) out.push({ tone: 'warn', head: 'Tập trung ngân hàng.', body: `${topB.bank || '(chưa đặt tên)'} giữ ${pcv(bs, 0)} tiền gửi, nên cân nhắc chia sang ngân hàng khác.` });
+  }
+  return out;
+}
+
+/* ---------- Bảng cân đối tài sản & nợ ---------- */
+const GCOLORS = { risk: '#2563eb', safe: '#0d9488', fixed: '#7c3aed' };
+function Tile({ label, value, color, sub }) {
+  return (
+    <div className="rounded-xl bg-slate-50 border border-slate-100 px-2.5 py-2 min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 truncate">{label}</p>
+      <p className={`text-base font-extrabold tnum mt-0.5 truncate ${color}`} title={vnd(value)}>{compact(value)}</p>
+      {sub && <p className="text-[10px] text-slate-500 tnum truncate">{sub}</p>}
+    </div>
+  );
+}
+function RatioChip({ label, value, tone, hint }) {
+  const cls = { good: 'bg-emerald-50 text-emerald-700 border-emerald-100', warn: 'bg-amber-50 text-amber-700 border-amber-100', bad: 'bg-rose-50 text-rose-700 border-rose-100', info: 'bg-slate-50 text-slate-700 border-slate-200' }[tone];
+  return (
+    <div className={`rounded-xl border px-2.5 py-2 min-w-0 ${cls}`} title={hint}>
+      <p className="text-[10px] font-bold uppercase tracking-wide opacity-80 truncate">{label}</p>
+      <p className="text-sm font-extrabold tnum mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+const BalanceCard = memo(function BalanceCard({ data, setData, c }) {
+  const setDebt = (k, v) => setData((d) => ({ ...d, debts: { ...d.debts, [k]: v } }));
+  const debtPct = c.total > 0 ? Math.min(100, (c.debt / c.total) * 100) : 0;
+  const equityPct = c.total > 0 ? 100 - debtPct : 0;
+  const runway = c.spent > 0 ? (c.bankTotal + data.cash) / c.spent : 0;
+  const riskShare = c.total > 0 ? (c.groups[0].assets / c.total) * 100 : 0;
+  const debtTone = debtPct <= 30 ? 'good' : debtPct <= 50 ? 'warn' : 'bad';
+  const runTone = c.spent <= 0 ? 'info' : runway >= 6 ? 'good' : runway >= 3 ? 'warn' : 'bad';
+  const levTone = { good: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-rose-50 text-rose-700' }[debtTone];
+  return (
+    <Card title="Bảng cân đối tài sản & nợ" right={<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${levTone}`}>ĐÒN BẨY {pcv(debtPct, 0)}</span>}>
+      <div className="grid grid-cols-3 gap-2">
+        <Tile label="Tổng tài sản" value={c.total} color="text-slate-900" />
+        <Tile label="Tổng nợ" value={c.debt} color="text-orange-600" />
+        <Tile label="Vốn chủ sở hữu" value={c.net} color={c.net < 0 ? 'text-rose-600' : 'text-blue-700'} sub={`${pcv(equityPct, 0)} tài sản`} />
+      </div>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600 mb-1">
+          <span>Cơ cấu nguồn vốn</span>
+          <span className="tnum">Vốn chủ {pcv(equityPct, 0)} · Nợ {pcv(debtPct, 0)}</span>
+        </div>
+        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100" role="img" aria-label={`Vốn chủ ${pcv(equityPct, 0)}, nợ ${pcv(debtPct, 0)}`}>
+          {c.total > 0 && <div style={{ width: equityPct + '%', background: '#2563eb' }} title={`Vốn chủ: ${vnd(c.net)}`} />}
+          {c.total > 0 && debtPct > 0 && <div style={{ width: debtPct + '%', background: '#f97316' }} title={`Nợ: ${vnd(c.debt)}`} />}
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-[11px] font-semibold text-slate-600 mb-1">Cơ cấu tài sản theo thanh khoản</div>
+        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-px" role="img" aria-label="Cơ cấu tài sản theo nhóm thanh khoản">
+          {c.groups.map((g) => g.assets > 0 && c.total > 0 ? <div key={g.key} style={{ width: (g.assets / c.total) * 100 + '%', background: GCOLORS[g.key] }} title={`${g.label}: ${vnd(g.assets)}`} /> : null)}
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-slate-600">
+          {c.groups.map((g) => (
+            <span key={g.key} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />{g.label.replace('Tài sản ', '')} <b className="tnum text-slate-800">{pcv(c.total > 0 ? (g.assets / c.total) * 100 : 0, 0)}</b></span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2.5">
+        {c.groups.map((g) => {
+          const share = c.total > 0 ? (g.assets / c.total) * 100 : 0;
+          const ltv = g.assets > 0 ? (g.debt / g.assets) * 100 : 0;
+          const eq = Math.max(0, g.equity);
+          const dShown = Math.min(g.debt, g.assets);
+          const ltvCls = ltv > 70 ? 'bg-rose-50 text-rose-700' : ltv > 40 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600';
+          return (
+            <div key={g.key} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <span className="mt-1 h-2.5 w-2.5 rounded-full shrink-0" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{g.label}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{g.sub}</p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-extrabold text-slate-900 tnum" title={vnd(g.assets)}>{compact(g.assets)}</p>
+                  <p className="text-[11px] text-slate-500 tnum">{pcv(share, 0)} tổng TS</p>
+                </div>
+              </div>
+              <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mt-2.5">
+                {g.assets > 0 && <div style={{ width: (eq / g.assets) * 100 + '%', background: GCOLORS[g.key] }} title={`Vốn chủ: ${vnd(g.equity)}`} />}
+                {g.assets > 0 && dShown > 0 && <div style={{ width: (dShown / g.assets) * 100 + '%', background: g.debtColor }} title={`${g.debtLabel}: ${vnd(g.debt)}`} />}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 text-xs text-slate-500 tnum">
+                <span>Vốn chủ <b className={g.equity < 0 ? 'text-rose-600' : 'text-slate-800'} title={vnd(g.equity)}>{compact(g.equity)}</b></span>
+                {g.debt > 0 && g.assets > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ltvCls}`}>Nợ / TS nhóm {pcv(ltv, 0)}</span>}
+                {g.debt > g.assets && <span className="font-semibold text-rose-600">Nợ vượt tài sản nhóm</span>}
+              </div>
+              <label htmlFor={`debt-${g.key}`} className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-xs font-semibold" style={{ color: g.debtInk }}>{g.debtLabel}</span>
+                <span className="inline-flex items-center gap-1">
+                  <NumInput id={`debt-${g.key}`} value={data.debts[g.key]} onChange={(v) => setDebt(g.key, v)} className="w-36 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-right text-xs font-bold tnum text-slate-800 outline-none focus:border-indigo-400 focus:bg-white" />
+                  <span className="text-xs text-slate-500">₫</span>
+                </span>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <RatioChip label="Nợ / Tài sản" value={pcv(debtPct, 0)} tone={debtTone} hint="Dưới 30% an toàn · 30-50% cần theo dõi · trên 50% rủi ro cao" />
+        <RatioChip label="Quỹ dự phòng" value={c.spent > 0 ? trim2(runway) + ' tháng' : '—'} tone={runTone} hint="(Tiền gửi + tiền mặt) / chi tiêu tháng. Chuẩn khuyến nghị 6 tháng." />
+        <RatioChip label="TS rủi ro" value={pcv(riskShare, 0)} tone="info" hint="Cổ phiếu / tổng tài sản" />
+      </div>
+    </Card>
+  );
+});
+
+const TABS = [
+  { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã cổ phiếu' },
+  { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm loại vàng' },
+  { key: 'savings', label: 'Sổ Tiết Kiệm', color: '#0d9488', ink: '#0f766e', cls: 'bank', add: 'Thêm sổ tiết kiệm' },
+];
+const FIELDS = {
+  stocks: [
+    { k: 'code', l: 'Mã cổ phiếu', kind: 'text', ph: 'VD: FPT', def: '' }, { k: 'qty', l: 'Khối lượng', kind: 'int', def: 0 },
+    { k: 'cost', l: 'Giá vốn trung bình (₫)', kind: 'int', def: 0 }, { k: 'price', l: 'Giá hiện tại (₫)', kind: 'int', def: 0 },
+    { k: 'target', l: '% Target trong nhóm CP', kind: 'dec', def: 0 },
+  ],
+  gold: [
+    { k: 'type', l: 'Loại vàng', kind: 'text', ph: 'VD: SJC, Nhẫn 9999', def: '' }, { k: 'qty', l: 'Số lượng (chỉ)', kind: 'dec', def: 0 },
+    { k: 'cost', l: 'Giá vốn / chỉ (₫)', kind: 'int', def: 0 }, { k: 'price', l: 'Giá hiện tại / chỉ (₫)', kind: 'int', def: 0 },
+    { k: 'target', l: '% Target trong nhóm vàng', kind: 'dec', def: 0 },
+  ],
+  savings: [
+    { k: 'bank', l: 'Ngân hàng (nơi gửi)', kind: 'text', ph: 'VD: ACB', def: '' }, { k: 'principal', l: 'Số tiền gốc (₫)', kind: 'int', def: 0 },
+    { k: 'rate', l: 'Lãi suất (%/năm)', kind: 'dec', def: 0 }, { k: 'term', l: 'Kỳ hạn (tháng)', kind: 'int', def: 6 },
+    { k: 'start', l: 'Ngày gửi', kind: 'date', def: toISO(TODAY) },
+  ],
+};
+const OVERLAY_PAD = 'max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))';
+
+function AddModal({ tab, onSubmit, onClose }) {
+  const cfg = FIELDS[tab.key];
+  const [f, setF] = useState(() => Object.fromEntries(cfg.map((x) => [x.k, x.def])));
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const submit = (e) => { e.preventDefault(); onSubmit(f); };
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 grid place-items-center" style={{ padding: OVERLAY_PAD }} role="dialog" aria-modal="true" aria-label={tab.add}>
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-full overflow-y-auto" style={{ borderTop: `4px solid ${tab.color}` }}>
+        <div className="flex items-center justify-between px-5 py-3">
+          <h2 className="font-bold text-slate-900">{tab.add}</h2>
+          <button type="button" onClick={onClose} aria-label="Đóng" className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"><Icon name="x" /></button>
+        </div>
+        <div className="px-5 pb-2 grid sm:grid-cols-2 gap-3">
+          {cfg.map((x, i) => (
+            <div key={x.k} className={x.k === 'code' || x.k === 'type' || x.k === 'bank' ? 'sm:col-span-2' : ''}>
+              <label htmlFor={`add-${x.k}`} className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">{x.l}</label>
+              {x.kind === 'text' && <input id={`add-${x.k}`} autoFocus={i === 0} value={f[x.k]} placeholder={x.ph} onChange={(e) => set(x.k, e.target.value)} className={FIELD} />}
+              {x.kind === 'int' && <NumInput id={`add-${x.k}`} value={f[x.k]} onChange={(v) => set(x.k, v)} className={`${FIELD} text-right tnum`} />}
+              {x.kind === 'dec' && <NumInput id={`add-${x.k}`} decimal value={f[x.k]} onChange={(v) => set(x.k, v)} className={`${FIELD} text-right tnum`} />}
+              {x.kind === 'date' && <input id={`add-${x.k}`} type="date" value={f[x.k]} onChange={(e) => set(x.k, e.target.value || toISO(TODAY))} className={FIELD} />}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-4">
+          <button type="button" onClick={onClose} className="text-xs font-bold px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">Hủy</button>
+          <button type="submit" className="text-xs font-bold px-4 py-2 rounded-xl text-white hover:opacity-90" style={{ background: tab.color }}>Thêm vào danh mục</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const PH_TEXT = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none focus:border-indigo-400 focus:bg-white';
+const PH_NUM = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
+function PField({ id, label, children }) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5 truncate">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const Portfolio = memo(function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
+  const [tabKey, setTabKey] = useState('stocks');
+  const [adding, setAdding] = useState(false);
+  const tab = TABS.find((t) => t.key === tabKey);
+  const upd = (key, id, patch) => setData((d) => ({ ...d, [key]: d[key].map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
+  const del = (key, id) => setData((d) => ({ ...d, [key]: d[key].filter((r) => r.id !== id) }));
+  const addRow = (f) => {
+    const row = { id: uid() };
+    if (tabKey === 'stocks') Object.assign(row, { code: String(f.code).toUpperCase(), qty: num(f.qty), cost: num(f.cost), price: num(f.price), target: num(f.target), dir: 0 });
+    if (tabKey === 'gold') Object.assign(row, { type: String(f.type), qty: num(f.qty), cost: num(f.cost), price: num(f.price), target: num(f.target) });
+    if (tabKey === 'savings') Object.assign(row, { bank: String(f.bank), principal: num(f.principal), rate: num(f.rate), term: num(f.term), start: f.start || toISO(TODAY) });
+    setData((d) => ({ ...d, [tabKey]: [...d[tabKey], row] }));
+    setAdding(false);
+  };
+  const tickPrices = () => setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) }));
+  const totalOf = { stocks: c.stockTotal, gold: c.goldTotal, savings: c.bankTotal }[tabKey];
+  const rows = data[tabKey];
+  const st = c.pct[tab.cls] - data.targets[tab.cls];
+  const stText = Math.abs(st) <= 2 ? 'Cân đối' : st < 0 ? `Thiếu ${pcv(Math.abs(st))} so mục tiêu` : `Vượt ${pcv(st)} so mục tiêu`;
+  const stCls = Math.abs(st) <= 2 ? 'bg-emerald-50 text-emerald-700' : st < 0 ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700';
+  const TD = 'px-2 py-1';
+  const targetSum = (key) => sum(data[key], (r) => r.target);
+  const tgtCls = (key) => (Math.abs(targetSum(key) - 100) > 0.001 ? 'text-rose-600' : 'text-slate-700');
+
+  let heads, body, foot;
+  if (tabKey === 'stocks') {
+    heads = [{ t: 'Mã CP', a: 'l' }, { t: 'KL' }, { t: 'Giá vốn TB' }, { t: 'Giá HT' }, { t: 'Giá trị' }, { t: 'Lãi/Lỗ' }, { t: '% TT' }, { t: '% Target' }, { t: '' }];
+    body = rows.map((r) => {
+      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
+      return (
+        <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
+          <td className={`${TD} w-28`}>
+            <div className="flex items-center gap-1">
+              <input id={`stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${CELL_L} font-bold uppercase`} />
+              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
+            </div>
+          </td>
+          <td className={`${TD} w-24`}><NumInput id={`stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={CELL} /></td>
+          <td className={`${TD} w-28`}><NumInput id={`stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={CELL} /></td>
+          <td className={`${TD} w-32`}>
+            <div className="flex items-center gap-0.5">
+              <span className={r.dir > 0 ? 'text-emerald-600' : r.dir < 0 ? 'text-rose-600' : 'text-transparent'} aria-hidden="true"><Icon name={r.dir < 0 ? 'down' : 'up'} size={10} /></span>
+              <NumInput id={`stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={CELL} />
+            </div>
+          </td>
+          <td className={`${TD} text-right font-bold text-slate-900 whitespace-nowrap`}><Money v={value} /></td>
+          <td className={`${TD} whitespace-nowrap`}><Pnl amount={pnl} p={pp} /></td>
+          <td className={`${TD} text-right tnum text-slate-600`}>{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)}</td>
+          <td className={`${TD} w-20`}><NumInput id={`stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={CELL} /></td>
+          <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} /></td>
+        </tr>
+      );
+    });
+    const tp = sum(rows, (r) => r.qty * (r.price - r.cost)), tc = sum(rows, (r) => r.qty * r.cost);
+    foot = (
+      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
+        <td className="px-2 py-2" colSpan={4}>Tổng</td>
+        <td className="px-2 py-2 text-right"><Money v={c.stockTotal} /></td>
+        <td className="px-2 py-2"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
+        <td className="px-2 py-2 text-right tnum">100%</td>
+        <td className={`px-2 py-2 text-right tnum ${tgtCls('stocks')}`}>{pcv(targetSum('stocks'), 0)}</td><td />
+      </tr>
+    );
+  } else if (tabKey === 'gold') {
+    heads = [{ t: 'Loại vàng', a: 'l' }, { t: 'SL (chỉ)' }, { t: 'Giá vốn/chỉ' }, { t: 'Giá HT/chỉ' }, { t: 'Giá trị' }, { t: 'Lãi/Lỗ' }, { t: '% TT' }, { t: '% Target' }, { t: '' }];
+    body = rows.map((r) => {
+      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
+      return (
+        <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
+          <td className={`${TD} w-40`}>
+            <div className="flex items-center gap-1">
+              <input id={`gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${CELL_L} font-bold`} />
+              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
+            </div>
+          </td>
+          <td className={`${TD} w-20`}><NumInput id={`gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={CELL} /></td>
+          <td className={`${TD} w-32`}><NumInput id={`gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={CELL} /></td>
+          <td className={`${TD} w-32`}><NumInput id={`gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={CELL} /></td>
+          <td className={`${TD} text-right font-bold text-slate-900 whitespace-nowrap`}><Money v={value} /></td>
+          <td className={`${TD} whitespace-nowrap`}><Pnl amount={pnl} p={pp} /></td>
+          <td className={`${TD} text-right tnum text-slate-600`}>{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)}</td>
+          <td className={`${TD} w-20`}><NumInput id={`gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={CELL} /></td>
+          <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} /></td>
+        </tr>
+      );
+    });
+    const tp = sum(rows, (r) => r.qty * (r.price - r.cost)), tc = sum(rows, (r) => r.qty * r.cost);
+    foot = (
+      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
+        <td className="px-2 py-2">Tổng</td>
+        <td className="px-2 py-2 text-right tnum">{String(sum(rows, (r) => r.qty)).replace('.', ',')}</td><td colSpan={2} />
+        <td className="px-2 py-2 text-right"><Money v={c.goldTotal} /></td>
+        <td className="px-2 py-2"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
+        <td className="px-2 py-2 text-right tnum">100%</td>
+        <td className={`px-2 py-2 text-right tnum ${tgtCls('gold')}`}>{pcv(targetSum('gold'), 0)}</td><td />
+      </tr>
+    );
+  } else {
+    heads = [{ t: 'Ngân hàng', a: 'l' }, { t: 'Số tiền gốc' }, { t: 'Lãi suất %/năm' }, { t: 'Kỳ hạn (th)' }, { t: 'Ngày gửi', a: 'l' }, { t: 'Đáo hạn', a: 'l' }, { t: 'Lãi dự kiến' }, { t: '' }];
+    body = rows.map((r) => {
+      const maturity = addMonths(parseISO(r.start), Math.round(r.term));
+      return (
+        <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
+          <td className={`${TD} w-40`}>
+            <div className="flex items-center gap-1">
+              <input id={`sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${CELL_L} font-bold`} />
+              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
+            </div>
+          </td>
+          <td className={`${TD} w-36`}><NumInput id={`sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={CELL} /></td>
+          <td className={`${TD} w-20`}><NumInput id={`sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={CELL} /></td>
+          <td className={`${TD} w-16`}><NumInput id={`sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={CELL} /></td>
+          <td className={TD}><input id={`sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${CELL_L} w-32`} /></td>
+          <td className={`${TD} whitespace-nowrap`}><div className="font-semibold tnum text-slate-800">{fmtDate(maturity)}</div><Countdown days={daysBetween(TODAY, maturity)} /></td>
+          <td className={`${TD} text-right font-bold text-emerald-600 whitespace-nowrap`}>+<Money v={(r.principal * r.rate * r.term) / 1200} /></td>
+          <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} /></td>
+        </tr>
+      );
+    });
+    foot = (
+      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
+        <td className="px-2 py-2">Tổng</td><td className="px-2 py-2 text-right"><Money v={c.bankTotal} /></td><td colSpan={4} />
+        <td className="px-2 py-2 text-right text-emerald-600">+<Money v={sum(rows, (r) => (r.principal * r.rate * r.term) / 1200)} /></td><td />
+      </tr>
+    );
+  }
+
+  const phone = view === 'phone';
+  const pAll = sum(rows, (r) => r.qty * (r.price - r.cost));
+  const cAll = sum(rows, (r) => r.qty * r.cost);
+  const interestAll = sum(rows, (r) => (r.principal * r.rate * r.term) / 1200);
+  const phoneCards = rows.map((r) => {
+    if (tabKey === 'stocks') {
+      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
+      return (
+        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center gap-2">
+            <input id={`pc-stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${PH_TEXT} uppercase flex-1 min-w-0`} />
+            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
+            <div className="text-right shrink-0">
+              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
+              <p className="text-[10px] text-slate-500 tnum">{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)} nhóm CP</p>
+            </div>
+            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2.5">
+            <PField id={`pc-stk-${r.id}-qty`} label="Khối lượng"><NumInput id={`pc-stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-cost`} label="Giá vốn TB"><NumInput id={`pc-stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-price`} label={<>Giá hiện tại <span className={r.dir > 0 ? 'text-emerald-600' : 'text-rose-600'}>{r.dir > 0 ? '▲' : r.dir < 0 ? '▼' : ''}</span></>}><NumInput id={`pc-stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={PH_NUM} /></PField>
+          </div>
+          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
+        </article>
+      );
+    }
+    if (tabKey === 'gold') {
+      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
+      return (
+        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-center gap-2">
+            <input id={`pc-gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
+            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
+            <div className="text-right shrink-0">
+              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
+              <p className="text-[10px] text-slate-500 tnum">{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)} nhóm vàng</p>
+            </div>
+            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-2.5">
+            <PField id={`pc-gld-${r.id}-qty`} label="Số lượng (chỉ)"><NumInput id={`pc-gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-cost`} label="Giá vốn / chỉ"><NumInput id={`pc-gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-price`} label="Giá hiện tại / chỉ"><NumInput id={`pc-gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={PH_NUM} /></PField>
+          </div>
+          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
+        </article>
+      );
+    }
+    const maturity = addMonths(parseISO(r.start), Math.round(r.term));
+    return (
+      <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="flex items-center gap-2">
+          <input id={`pc-sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
+          {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
+          <div className="text-right shrink-0">
+            <p className="text-sm font-extrabold text-slate-900"><Money v={r.principal} /></p>
+            <p className="text-[10px] text-slate-500 tnum">{pcv(c.bankTotal > 0 ? (r.principal / c.bankTotal) * 100 : 0, 0)} nhóm gửi</p>
+          </div>
+          <IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-2.5">
+          <PField id={`pc-sav-${r.id}-pr`} label="Số tiền gốc"><NumInput id={`pc-sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-rate`} label="Lãi suất %/năm"><NumInput id={`pc-sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-term`} label="Kỳ hạn (tháng)"><NumInput id={`pc-sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-start`} label="Ngày gửi"><input id={`pc-sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${PH_TEXT} min-w-0`} /></PField>
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-100">
+          <div><p className="text-[10px] font-bold uppercase text-slate-400">Đáo hạn</p><p className="text-xs font-semibold tnum text-slate-800">{fmtDate(maturity)}</p><Countdown days={daysBetween(TODAY, maturity)} /></div>
+          <div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-400">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={(r.principal * r.rate * r.term) / 1200} /></p></div>
+        </div>
+      </article>
+    );
+  });
+  const phoneFoot = (
+    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex items-center justify-between gap-2">
+      <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng {tab.label}</p><p className="text-base font-extrabold tnum text-slate-900"><Money v={totalOf} /></p></div>
+      {tabKey !== 'savings'
+        ? <Pnl amount={pAll} p={cAll > 0 ? (pAll / cAll) * 100 : 0} />
+        : <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={interestAll} /></p></div>}
+    </div>
+  );
+
+  return (
+    <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-w-0" style={{ borderTop: `4px solid ${tab.color}` }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pt-4 pb-2">
+        <div className="min-w-0">
+          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Nhập liệu danh mục đầu tư</h2>
+          <div role="tablist" aria-label="Danh mục đầu tư" className="flex flex-wrap gap-1.5">
+            {TABS.map((t) => <TabButton key={t.key} color={t.color} active={t.key === tabKey} onClick={() => setTabKey(t.key)}>{t.label}</TabButton>)}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {tabKey === 'stocks' && (
+            <>
+              <label className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer select-none"><input id="live-price" type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="accent-indigo-600" />Tự chạy 4s</label>
+              <button type="button" onClick={tickPrices} className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Icon name="refresh" size={12} />Cập nhật giá</button>
+            </>
+          )}
+          <button type="button" onClick={() => setAdding(true)} aria-label={tab.add} title={tab.add} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg text-white hover:opacity-90 active:scale-95 transition" style={{ background: tab.color }}><Icon name="plus" size={14} />{tab.add}</button>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 pb-3 text-xs">
+        <span className="font-bold text-slate-700">{tab.label}:</span>
+        <Money v={totalOf} className="font-extrabold text-slate-900" />
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: tab.color + '22', color: tab.ink }}>{pcv(c.pct[tab.cls])} Tổng TS</span>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${stCls}`}>{stText}</span>
+      </div>
+      {phone ? (
+        <div className="px-3 pb-3 space-y-2.5">
+          {rows.length === 0 && <p className="text-xs text-slate-400 text-center py-8">Chưa có dữ liệu {tab.label.toLowerCase()}. Bấm “{tab.add}” để nhập.</p>}
+          {phoneCards}
+          {rows.length > 0 && phoneFoot}
+        </div>
+      ) : (
+        <div className="max-h-[420px] overflow-y-auto thin-scroll">
+          <TableLayout heads={heads} isEmpty={rows.length === 0} empty={`Chưa có dữ liệu ${tab.label.toLowerCase()}. Bấm “${tab.add}” để nhập.`} foot={foot}>{body}</TableLayout>
+        </div>
+      )}
+      <div className="px-4 sm:px-5 pb-4"><Insight items={portfolioInsights(tabKey, data, c)} title={`Nhận định ${tab.label.toLowerCase()}`} /></div>
+      {adding && <AddModal tab={tab} onSubmit={addRow} onClose={() => setAdding(false)} />}
+    </section>
+  );
+});
+
+const TopAssetsCard = memo(function TopAssetsCard({ data, c }) {
+  const items = [
+    ...data.stocks.map((r) => ({ name: `Cổ phiếu ${r.code || '(chưa đặt mã)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Cổ phiếu', value: r.qty * r.price, color: CLASSES[0].color })),
+    ...data.gold.map((r) => ({ name: `Vàng ${r.type || '(chưa đặt tên)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Vàng', value: r.qty * r.price, color: CLASSES[1].color })),
+    ...data.savings.map((r) => ({ name: `Sổ tiết kiệm ${r.bank || '(chưa đặt tên)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Tiền gửi', value: r.principal, color: CLASSES[2].color })),
+    { name: 'Tiền mặt', type: 'Tiền mặt', value: data.cash, color: CLASSES[3].color },
+    { name: 'Nợ phải đòi', type: 'Nợ phải đòi', value: data.receivable, color: CLASSES[4].color },
+    { name: data.estateName || 'Bất động sản', type: 'Bất động sản', value: data.estate, color: CLASSES[5].color },
+  ].filter((a) => a.value > 0).sort((a, b) => b.value - a.value);
+  const shown = items.slice(0, 6);
+  const max = shown.length ? shown[0].value : 1;
+  return (
+    <Card title="Top tài sản lớn nhất" right={<span className="text-[11px] font-semibold text-slate-500 tnum">Tổng TS {compact(c.total)}</span>}>
+      <div className="space-y-3.5">
+        {shown.length === 0 && <p className="text-xs text-slate-400 text-center py-6">Chưa có tài sản. Nhập giá trị ở khối cơ cấu danh mục hoặc bảng nhập liệu.</p>}
+        {shown.map((a, i) => (
+          <ProgressRow key={a.name + i} title={a.name} sub={`${a.type} · ${pcv(c.total > 0 ? (a.value / c.total) * 100 : 0)} tổng TS`} valueText={compact(a.value)} valueTitle={vnd(a.value)} pct={(a.value / max) * 100} color={a.color}
+            lead={<span className="h-6 w-6 shrink-0 rounded-full bg-slate-100 text-slate-600 text-[11px] font-extrabold grid place-items-center">{i + 1}</span>} />
+        ))}
+      </div>
+      <Insight items={topAssetInsights(items, c, data)} />
+    </Card>
+  );
+});
+
+function CategoryRow({ cat, budget, onChange, onDelete, view }) {
+  const [open, setOpen] = useState(false);
+  const ph = view === 'phone';
+  const total = catTotal(cat);
+  const p = budget > 0 ? (total / budget) * 100 : 0;
+  const over = p > 100;
+  const addItem = () => {
+    let items = cat.items, amount = cat.amount;
+    if (items.length === 0 && amount > 0) { items = [{ id: uid(), name: 'Chi chung', amount }]; amount = 0; }
+    onChange({ items: [...items, { id: uid(), name: '', amount: 0 }], amount });
+    setOpen(true);
+  };
+  const updItem = (id, patch) => onChange({ items: cat.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
+  const delItem = (id) => { const items = cat.items.filter((i) => i.id !== id); onChange({ items, amount: items.length ? cat.amount : 0 }); };
+  const amt = cat.items.length > 0
+    ? <Money v={total} className="text-sm font-bold text-slate-900" />
+    : <div className={ph ? 'w-36' : 'w-28'}><NumInput id={`cat-${cat.id}-amt`} ariaLabel={`Tổng nhóm ${cat.name}`} value={cat.amount} onChange={(v) => onChange({ amount: v })} className={`${CELL} text-sm font-bold`} /></div>;
+  const pct = <span className={`w-10 text-right text-[11px] font-bold tnum ${over ? 'text-rose-600' : 'text-slate-500'}`}>{pcv(p, 0)}</span>;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: cat.color }} aria-hidden="true" />
+        <input id={`cat-${cat.id}-name`} aria-label="Tên nhóm chi tiêu" value={cat.name} placeholder="Tên nhóm" onChange={(e) => onChange({ name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 text-sm font-semibold text-slate-800`} />
+        {!ph && amt}
+        {!ph && pct}
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? 'Thu gọn' : 'Mở chi tiết khoản chi'} className="p-1 rounded-md text-slate-400 hover:bg-slate-100">
+          <span className="block transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}><Icon name="chevron" size={14} /></span>
+        </button>
+        <IconBtn tone="rose" icon="trash" label={`Xóa nhóm ${cat.name}`} onClick={onDelete} />
+      </div>
+      {ph && <div className="ml-4 mt-1 flex items-center justify-between gap-2">{amt}{pct}</div>}
+      <div className="ml-4 mt-1"><Bar pct={p} color={over ? '#e11d48' : cat.color} label={cat.name} /></div>
+      {open && (
+        <div className="ml-4 mt-2 space-y-1">
+          {cat.items.map((it) => (
+            <div key={it.id} className="flex items-center gap-1.5">
+              <input id={`it-${it.id}-name`} aria-label="Tên khoản chi" value={it.name} placeholder="VD: Tiền điện" onChange={(e) => updItem(it.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 bg-slate-50`} />
+              <div className={`${ph ? 'w-32' : 'w-28'} shrink-0`}><NumInput id={`it-${it.id}-amt`} ariaLabel={`Số tiền ${it.name}`} value={it.amount} onChange={(v) => updItem(it.id, { amount: v })} className={`${CELL} bg-slate-50`} /></div>
+              <IconBtn tone="rose" icon="trash" label={`Xóa khoản ${it.name}`} onClick={() => delItem(it.id)} />
+            </div>
+          ))}
+          <button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800"><Icon name="plus" size={12} />Thêm khoản chi (tiền nhà, tiền điện, đổ xăng...)</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SpendingCard = memo(function SpendingCard({ data, setData, c, view }) {
+  const updCat = (id, patch) => setData((d) => ({ ...d, categories: d.categories.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+  const delCat = (id) => setData((d) => ({ ...d, categories: d.categories.filter((x) => x.id !== id) }));
+  const addCat = () => setData((d) => ({ ...d, categories: [...d.categories, { id: uid(), name: '', color: CAT_COLORS[d.categories.length % CAT_COLORS.length], amount: 0, items: [] }] }));
+  const left = data.budget - c.spent;
+  return (
+    <Card title="Cơ cấu chi tiêu hàng tháng" right={<IconBtn icon="plus" label="Thêm nhóm chi tiêu" onClick={addCat} />}>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label htmlFor="income" className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Thu nhập / tháng</label>
+          <NumInput id="income" value={data.income} onChange={(v) => setData((d) => ({ ...d, income: v }))} className={`${BOXED} text-emerald-600`} />
+        </div>
+        <div>
+          <label htmlFor="budget" className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Ngân sách chi tiêu</label>
+          <NumInput id="budget" value={data.budget} onChange={(v) => setData((d) => ({ ...d, budget: v }))} className={`${BOXED} text-indigo-700`} />
+        </div>
+      </div>
+      <div className="space-y-3.5">
+        {data.categories.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có nhóm chi tiêu. Bấm + để thêm.</p>}
+        {data.categories.map((cat) => <CategoryRow key={cat.id + (cat._owner || '')} cat={cat} budget={data.budget} view={view} onChange={(patch) => updCat(cat.id, patch)} onDelete={() => delCat(cat.id)} />)}
+        <ProgressRow title={left >= 0 ? 'Ngân sách còn lại' : 'Vượt ngân sách'} valueText={compact(Math.abs(left))} valueTitle={vnd(Math.abs(left))} pctText={pcv(data.budget > 0 ? (Math.abs(left) / data.budget) * 100 : 0, 0)} pct={data.budget > 0 ? (Math.abs(left) / data.budget) * 100 : 0} color={left >= 0 ? '#cbd5e1' : '#e11d48'} />
+      </div>
+      <p className="text-xs text-slate-500 mt-3 tnum">Đã chi <Money v={c.spent} className="font-bold text-rose-600" /> / <Money v={data.budget} className="font-bold text-slate-700" /></p>
+      <Insight items={spendingInsights(data, c)} />
+    </Card>
+  );
+});
+
+function projectGoal(g, surplus) {
+  const rem = Math.max(0, g.target - g.current);
+  const deadline = parseISO(g.deadline);
+  const daysLeft = daysBetween(TODAY, deadline);
+  if (g.target > 0 && rem === 0) return { kind: 'done', line: 'Đã đủ số tiền mục tiêu', rem };
+  if (g.target <= 0) return { kind: 'none', line: 'Nhập số tiền mục tiêu để xem dự phóng', rem };
+  if (surplus <= 0) return { kind: 'bad', line: 'Thặng dư ≤ 0, chưa thể tích lũy thêm', rem };
+  const months = Math.ceil(rem / surplus);
+  const line = `Nếu dồn 100% thặng dư (${compact(surplus)}/th), cần ${months} tháng`;
+  if (daysLeft < 0) return { kind: 'bad', line, verdict: `Đã quá hạn ${Math.abs(daysLeft)} ngày`, rem };
+  const monthsLeft = daysLeft / 30.4375;
+  if (months <= monthsLeft) return { kind: 'ok', line, verdict: `Kịp hạn, dư ~${Math.max(0, Math.floor(monthsLeft - months))} tháng`, rem };
+  return { kind: 'bad', line, verdict: `Không kịp hạn, trễ ~${Math.round(months - monthsLeft)} tháng. Cần ${compact(rem / Math.max(1, Math.floor(monthsLeft)))}/tháng`, rem };
+}
+
+const GoalsCard = memo(function GoalsCard({ data, setData, c }) {
+  const [editId, setEditId] = useState(null);
+  const upd = (id, patch) => setData((d) => ({ ...d, goals: d.goals.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
+  const del = (id) => setData((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) }));
+  const add = (preset = null) => {
+    const id = uid();
+    const newGoal = preset || { id, name: 'Mục tiêu mới', current: 0, target: 50000000, deadline: toISO(addMonths(TODAY, 12)), source: 'bank', priority: 2 };
+    setData((d) => ({ ...d, goals: [...d.goals, { ...newGoal, id }] }));
+    if (!preset) setEditId(id);
+  };
+
+  const poolAvail = { bank: c.bankTotal, cash: data.cash, gold: c.goldTotal, stock: c.stockTotal };
+  const poolStats = {};
+  const goalAllocStatus = {};
+
+  ['bank', 'cash', 'gold', 'stock'].forEach((srcKey) => {
+    const avail = poolAvail[srcKey] || 0;
+    const goalsInSrc = data.goals
+      .filter((g) => (g.source || 'bank') === srcKey)
+      .slice()
+      .sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
+
+    const totalUsed = sum(goalsInSrc, (g) => g.current);
+    const balance = avail - totalUsed;
+    let remPool = avail;
+
+    goalsInSrc.forEach((g) => {
+      const covered = Math.max(0, Math.min(g.current, remPool));
+      const uncovered = Math.max(0, g.current - covered);
+      remPool = Math.max(0, remPool - g.current);
+      goalAllocStatus[g.id] = { covered, uncovered, avail, totalUsed, balance };
+    });
+
+    poolStats[srcKey] = {
+      key: srcKey, label: GOAL_SOURCES.find((s) => s.key === srcKey).label,
+      avail, totalUsed, balance, count: goalsInSrc.length, goalsInSrc
+    };
+  });
+
+  const overdrawnPools = Object.values(poolStats).filter((p) => p.balance < 0);
+  const suggestions = [];
+  const emergencyTarget = c.spent > 0 ? c.spent * 6 : 42000000;
+  const hasEmergencyGoal = data.goals.some((g) => /khẩn cấp|dự phòng/i.test(g.name));
+
+  if (!hasEmergencyGoal) {
+    suggestions.push({
+      id: 'sug-emg', tone: 'amber',
+      text: `Bạn chưa có Quỹ khẩn cấp (chuẩn 6 tháng chi tiêu = ${compact(emergencyTarget)}). Nên ưu tiên số 1 từ Tiền gửi NH để bảo vệ tài sản.`,
+      actionLabel: '+ Tạo Quỹ khẩn cấp',
+      onAction: () => add({ name: 'Quỹ khẩn cấp 6 tháng', current: Math.min(c.bankTotal, emergencyTarget), target: emergencyTarget, deadline: toISO(addMonths(TODAY, 6)), source: 'bank', priority: 1 })
+    });
+  }
+
+  overdrawnPools.forEach((p) => {
+    const lowPrioGoals = p.goalsInSrc.filter((g) => goalAllocStatus[g.id]?.uncovered > 0);
+    const names = lowPrioGoals.map((g) => `“${g.name}” (Ưu tiên ${g.priority || 2})`).join(', ');
+    suggestions.push({
+      id: `sug-over-${p.key}`, tone: 'rose',
+      text: `Nguồn ${p.label} đang chỉ có ${compact(p.avail)} nhưng bạn phân bổ tới ${compact(p.totalUsed)} (Đang âm ${compact(Math.abs(p.balance))}). Khuyến nghị: Giảm số tiền hiện có hoặc lùi độ ưu tiên của ${names || 'mục tiêu phụ'}.`
+    });
+  });
+
+  const activeGoals = data.goals.filter((g) => g.target > g.current).slice().sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
+
+  if (c.surplus > 0 && activeGoals.length > 0) {
+    const topG = activeGoals[0];
+    const rem = topG.target - topG.current;
+    const mNeed = Math.ceil(rem / c.surplus);
+    suggestions.push({
+      id: 'sug-surplus', tone: 'indigo',
+      text: `Gợi ý ưu tiên thặng dư (+${compact(c.surplus)}/tháng): Nên dồn trước cho “${topG.name}” (Ưu tiên ${topG.priority || 2}, còn thiếu ${compact(rem)}). Chỉ mất khoảng ${mNeed} tháng để hoàn thành dứt điểm.`
+    });
+  } else if (c.surplus <= 0 && activeGoals.length > 0) {
+    suggestions.push({
+      id: 'sug-nosurplus', tone: 'amber',
+      text: `Thặng dư tháng đang ≤ 0 (${compact(c.surplus)}). Bạn cần cắt giảm chi tiêu hoặc tăng thu nhập để có dòng tiền nuôi ${activeGoals.length} mục tiêu đang chạy.`
+    });
+  }
+
+  const freeBank = Math.max(0, poolStats.bank.balance);
+  const freeCash = Math.max(0, poolStats.cash.balance);
+  if ((freeBank + freeCash) >= 10000000 && activeGoals.length > 0) {
+    const topG = activeGoals[0];
+    suggestions.push({
+      id: 'sug-idle', tone: 'emerald',
+      text: `Bạn đang còn ${compact(freeBank + freeCash)} vốn thanh khoản chưa gán mục tiêu (${compact(freeBank)} Tiền gửi NH, ${compact(freeCash)} Tiền mặt). Có thể phân bổ thêm vào “${topG.name}” để rút ngắn thời gian.`
+    });
+  }
+
+  return (
+    <Card title="Tiến độ mục tiêu & Phân bổ nguồn tiền" right={<IconBtn icon="plus" label="Thêm mục tiêu" onClick={() => add()} />}>
+      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kiểm tra nguồn vốn cấp cho mục tiêu</span>
+          <span className="text-[10px] font-semibold text-slate-400">Đã gán / Thực có</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {['bank', 'cash', 'gold', 'stock'].map((k) => {
+            const st = poolStats[k];
+            if (st.avail === 0 && st.totalUsed === 0) return null;
+            const isOver = st.balance < 0;
+            return (
+              <div key={k} className={`rounded-lg border px-2 py-1.5 text-xs ${isOver ? 'bg-rose-50 border-rose-300 text-rose-900' : 'bg-white border-slate-200 text-slate-700'}`}>
+                <div className="flex items-center justify-between font-bold">
+                  <span className="truncate">{st.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isOver ? 'bg-rose-600 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
+                    {isOver ? `Âm ${compact(Math.abs(st.balance))}` : `Dư ${compact(st.balance)}`}
+                  </span>
+                </div>
+                <div className="text-[11px] tnum mt-0.5 text-slate-500">
+                  Dùng <b className={isOver ? 'text-rose-700' : 'text-slate-800'}>{compact(st.totalUsed)}</b> / {compact(st.avail)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {overdrawnPools.length > 0 && (
+        <div className="mb-3 rounded-xl border-2 border-rose-500 bg-rose-50 p-3 text-xs text-rose-900" role="alert">
+          <div className="flex items-center gap-1.5 font-extrabold text-rose-700 uppercase tracking-wide text-[11px]">
+            <Icon name="alert" size={15} /> Cảnh báo vượt ngân sách nguồn tiền!
+          </div>
+          {overdrawnPools.map((p) => (
+            <p key={p.key} className="mt-1 leading-relaxed">
+              • Nguồn <b>{p.label}</b> chỉ có thực tế <b>{compact(p.avail)}</b> nhưng tổng các mục tiêu lấy từ nguồn này lên tới <b>{compact(p.totalUsed)}</b> (Đang bị âm <b>{compact(Math.abs(p.balance))}</b>). Hãy chọn mục tiêu quan trọng làm <b>Ưu tiên 1</b> hoặc giảm số tiền phân bổ!
+            </p>
+          ))}
+        </div>
+      )}
+
+      {suggestions.length > 0 && (
+        <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700">
+            <Icon name="sparkles" size={14} /> Gợi ý &amp; Ưu tiên dòng tiền
+          </div>
+          {suggestions.map((s) => (
+            <div key={s.id} className="text-[11px] leading-relaxed text-slate-700 flex flex-wrap items-center justify-between gap-2 bg-white/80 rounded-lg px-2.5 py-1.5 border border-indigo-100/80">
+              <span className="flex-1 min-w-[180px]">{s.text}</span>
+              {s.onAction && (
+                <button type="button" onClick={s.onAction} className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-500">
+                  {s.actionLabel}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {data.goals.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có mục tiêu. Bấm + để thêm.</p>}
+        {data.goals.map((g) => {
+          const p = g.target > 0 ? (g.current / g.target) * 100 : 0;
+          const pj = projectGoal(g, c.surplus);
+          const good = pj.kind === 'done' || pj.kind === 'ok';
+          const editing = editId === g.id;
+          const srcObj = GOAL_SOURCES.find((s) => s.key === (g.source || 'bank')) || GOAL_SOURCES[0];
+          const prioObj = PRIORITIES.find((pr) => pr.v === (g.priority || 2)) || PRIORITIES[1];
+          const alloc = goalAllocStatus[g.id];
+          const isShortfall = alloc && alloc.uncovered > 0;
+
+          return (
+            <article key={g.id + (g._owner || '')} className={`rounded-xl border p-3 transition ${isShortfall ? 'border-rose-400 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'}`}>
+              <div className="flex items-center gap-1.5">
+                {editing
+                  ? <input id={`goal-${g.id}-name`} aria-label="Tên mục tiêu" value={g.name} onChange={(e) => upd(g.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 font-bold bg-white border-slate-200`} />
+                  : <h3 className="flex-1 min-w-0 truncate text-sm font-bold text-slate-800">{g.name}</h3>}
+                <span className={`text-sm font-extrabold tnum ${p >= 100 ? 'text-emerald-600' : 'text-indigo-700'}`}>{pcv(p, 0)}</span>
+                <IconBtn icon={editing ? 'check' : 'edit'} label={editing ? 'Xong' : 'Sửa mục tiêu'} onClick={() => setEditId(editing ? null : g.id)} />
+                <IconBtn tone="rose" icon="trash" label={`Xóa mục tiêu ${g.name}`} onClick={() => del(g.id)} />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <select aria-label="Nguồn vốn" value={g.source || 'bank'} onChange={(e) => upd(g.id, { source: e.target.value })} className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}>
+                  {GOAL_SOURCES.map((s) => (<option key={s.key} value={s.key}>Nguồn: {s.label}</option>))}
+                </select>
+                <select aria-label="Mức độ ưu tiên" value={g.priority || 2} onChange={(e) => upd(g.id, { priority: Number(e.target.value) })} className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}>
+                  {PRIORITIES.map((pr) => (<option key={pr.v} value={pr.v}>{pr.label}</option>))}
+                </select>
+              </div>
+
+              <div className="mt-2"><Bar pct={p} color={isShortfall ? '#e11d48' : p >= 100 ? '#16a34a' : '#4f46e5'} label={g.name} /></div>
+
+              {editing ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2.5">
+                  <div>
+                    <label htmlFor={`goal-${g.id}-cur`} className="text-[10px] font-bold text-slate-500">Phân bổ hiện có</label>
+                    <NumInput id={`goal-${g.id}-cur`} value={g.current} onChange={(v) => upd(g.id, { current: v })} className={`${CELL} bg-white border-slate-200 font-bold`} />
+                  </div>
+                  <div>
+                    <label htmlFor={`goal-${g.id}-tgt`} className="text-[10px] font-bold text-slate-500">Mục tiêu cần</label>
+                    <NumInput id={`goal-${g.id}-tgt`} value={g.target} onChange={(v) => upd(g.id, { target: v })} className={`${CELL} bg-white border-slate-200 font-bold`} />
+                  </div>
+                  <div>
+                    <label htmlFor={`goal-${g.id}-due`} className="text-[10px] font-bold text-slate-500">Hạn hoàn thành</label>
+                    <input id={`goal-${g.id}-due`} type="date" value={g.deadline} onChange={(e) => upd(g.id, { deadline: e.target.value || g.deadline })} className={`${CELL_L} bg-white border-slate-200`} />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-500 mt-2 tnum">
+                  <span>Đang gán: <Money v={g.current} className="font-bold text-slate-800" /> / <Money v={g.target} className="font-bold text-slate-800" /></span>
+                  <span>Hạn {fmtDate(parseISO(g.deadline))}</span>
+                </div>
+              )}
+
+              {isShortfall && (
+                <div className="mt-2 rounded-md bg-rose-600 text-white px-2.5 py-1.5 text-[11px] font-semibold leading-snug">
+                  ⚠️ Thiếu hụt {compact(alloc.uncovered)} từ nguồn {srcObj.label}! (Sau khi cấp cho mục tiêu ưu tiên cao hơn, nguồn này chỉ còn đủ {compact(alloc.covered)} cho mục tiêu này).
+                </div>
+              )}
+
+              <p className={`text-[11px] mt-2 leading-snug rounded-md px-2 py-1.5 ${good ? 'bg-emerald-50 text-emerald-800' : pj.kind === 'bad' ? 'bg-amber-50 text-amber-900' : 'bg-slate-100 text-slate-600'}`} title={`Còn thiếu ${vnd(pj.rem)} · thặng dư ${vnd(c.surplus)}/tháng`}>
+                {pj.line}{pj.verdict && <b className="block">{pj.verdict}</b>}
+              </p>
+            </article>
+          );
+        })}
+      </div>
+    </Card>
+  );
+});
+
+const VIEWS = [
+  { k: 'pc', label: 'PC View', icon: 'monitor' },
+  { k: 'phone', label: 'iPhone View', icon: 'phone' },
+  { k: 'auto', label: 'Auto', icon: 'auto' },
+];
+function ViewSwitcher({ view, setView, compact = false }) {
+  return (
+    <div role="group" aria-label="Chế độ xem" className="inline-flex p-1 rounded-xl bg-white border border-slate-200 shadow-sm">
+      {VIEWS.map((v) => (
+        <button key={v.k} type="button" onClick={() => setView(v.k)} aria-pressed={view === v.k} aria-label={v.label} title={v.label}
+          className={`inline-flex items-center gap-1.5 text-xs font-bold ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded-lg transition whitespace-nowrap ${view === v.k ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
+          <Icon name={v.icon} size={14} />{!compact && v.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function loadView() {
+  try { const v = localStorage.getItem(VIEW_KEY); return v === 'pc' || v === 'phone' ? v : 'auto'; } catch (e) { return 'auto'; }
+}
+
+function LiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  return <span className="tnum">{[now.getHours(), now.getMinutes(), now.getSeconds()].map((x) => String(x).padStart(2, '0')).join(':')}</span>;
+}
+
+function useNarrow() {
+  const q = '(max-width: 600px)';
+  const [m, setM] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(q).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(q);
+    const h = () => setM(mq.matches);
+    h();
+    if (mq.addEventListener) mq.addEventListener('change', h); else mq.addListener(h);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', h); else mq.removeListener(h); };
+  }, []);
+  return m;
+}
+
+function SyncBadge({ sync, onRetry }) {
+  const m = {
+    loading: { dot: 'bg-slate-400 animate-pulse', txt: 'Đang tải dữ liệu…', cls: 'text-slate-500' },
+    ready: { dot: 'bg-emerald-500', txt: 'Đã mã hóa E2EE & đồng bộ Supabase', cls: 'text-emerald-700' },
+    saving: { dot: 'bg-amber-400 animate-pulse', txt: 'Đang mã hóa (Worker) & lưu…', cls: 'text-amber-700' },
+    error: { dot: 'bg-rose-500', txt: 'Lỗi đồng bộ, bấm để thử lại', cls: 'text-rose-700' },
+    offline: { dot: 'bg-slate-400', txt: 'Chỉ lưu trên máy này', cls: 'text-slate-500' },
+  }[sync] || { dot: 'bg-emerald-500', txt: 'Đã đồng bộ Supabase', cls: 'text-emerald-700' };
+  const inner = (<><span className={`h-2 w-2 rounded-full shrink-0 ${m.dot}`} aria-hidden="true" /><span className="truncate">{m.txt}</span></>);
+  const cls = `inline-flex items-center gap-1.5 text-[11px] font-semibold min-w-0 ${m.cls}`;
+  return sync === 'error'
+    ? <button type="button" onClick={onRetry} className={cls}>{inner}</button>
+    : <span className={cls} role="status">{inner}</span>;
+}
+
+function StatusBar() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 10000); return () => clearInterval(t); }, []);
+  const t = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  return (
+    <div className="shrink-0 h-11 flex items-end justify-between px-8 pb-1 text-[13px] font-bold text-slate-900 bg-white" aria-hidden="true">
+      <span className="tnum">{t}</span>
+      <span className="inline-flex h-2.5 w-[22px] rounded-[3px] border border-slate-900 p-px"><span className="block h-full w-4/5 rounded-[1px] bg-slate-900" /></span>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ GMAIL & ADMIN CO-WORK
+   ══════════════════════════════════════════════════ */
+function GmailAuthScreen({ hasUsers, legacyCipher, onAuthSuccess, onGoogleOAuth }) {
+  const [isRegister, setIsRegister] = useState(!hasUsers);
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [pin, setPin] = useState('');
+  const [oldPin, setOldPin] = useState('');
+  const [error, setError] = useState('');
+
+  const submit = (e) => {
+    e.preventDefault();
+    const mail = cleanEmail(email);
+    if (!mail.includes('@')) {
+      setError('Vui lòng nhập địa chỉ Gmail hợp lệ (VD: tenban@gmail.com)');
+      return;
+    }
+    if (pin.length < 4) {
+      setError('Mã PIN / Mật khẩu phải từ 4 ký tự trở lên');
+      return;
+    }
+    const res = onAuthSuccess({
+      mode: isRegister ? 'register' : 'login',
+      email: mail,
+      name: name.trim() || mail.split('@')[0],
+      pin,
+      oldPin
+    });
+    if (!res.ok) setError(res.msg);
+  };
+
+  return (
+    <div className="min-h-screen grid place-items-center bg-slate-50 p-4">
+      <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-200">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <div className="w-11 h-11 bg-indigo-600 text-white rounded-2xl grid place-items-center shadow-md">
+            <Icon name="layers" size={22} />
+          </div>
+        </div>
+        <h1 className="text-xl font-extrabold text-center text-slate-900">WEALTHOS GIA SẢN</h1>
+        <p className="text-xs text-center text-slate-500 mt-1 mb-5">
+          {!hasUsers
+            ? 'Khởi tạo tài khoản Gmail Admin Tối Thượng đầu tiên'
+            : isRegister ? 'Đăng ký tài khoản Gmail mới trên hệ thống' : 'Đăng nhập bằng Gmail để quản lý gia sản & Co-work'}
+        </p>
+
+        <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl mb-5">
+          <button type="button" onClick={() => { setIsRegister(false); setError(''); }}
+            className={`text-xs font-bold py-2 rounded-lg transition ${!isRegister ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+            Đăng nhập
+          </button>
+          <button type="button" onClick={() => { setIsRegister(true); setError(''); }}
+            className={`text-xs font-bold py-2 rounded-lg transition ${isRegister ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+            Đăng ký Gmail mới
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-3.5">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Địa chỉ Gmail</label>
+            <input type="email" required value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="ví dụ: hoangson@gmail.com" className={FIELD} autoFocus />
+          </div>
+
+          {isRegister && (
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Tên hiển thị (VD: Chồng / Vợ)</label>
+              <input type="text" required value={name} onChange={(e) => { setName(e.target.value); setError(''); }} placeholder="VD: Hoàng Sơn (Admin)" className={FIELD} />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">Mã PIN / Mật khẩu bảo mật</label>
+            <input type="password" required value={pin} onChange={(e) => { setPin(e.target.value); setError(''); }} placeholder="Nhập từ 4 ký tự / số trở lên" className={`${FIELD} font-bold tracking-widest`} />
+          </div>
+
+          {!hasUsers && legacyCipher && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+              <label className="block text-[11px] font-bold text-amber-900 mb-1">
+                Phát hiện dữ liệu đã mã hóa từ phiên bản trước. Nhập mã PIN cũ để khôi phục tự động (hoặc bỏ trống nếu muốn tạo mới):
+              </label>
+              <input type="password" value={oldPin} onChange={(e) => setOldPin(e.target.value)} placeholder="Mã PIN cũ của bạn" className={`${FIELD} bg-white`} />
+            </div>
+          )}
+
+          {error && <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{error}</p>}
+
+          <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition active:scale-95 shadow-sm">
+            {!hasUsers ? 'Tạo Admin Tối Thượng & Bắt đầu' : isRegister ? 'Tạo tài khoản Gmail' : 'Đăng nhập vào WealthOS'}
+          </button>
+        </form>
+
+        <div className="relative my-5 text-center">
+          <span className="bg-white px-2 text-[11px] text-slate-400 relative z-10">Hoặc</span>
+          <div className="absolute inset-x-0 top-1/2 h-px bg-slate-200" />
+        </div>
+
+        <button type="button" onClick={onGoogleOAuth}
+          className="w-full flex items-center justify-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition">
+          <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.8C6.2 7.2 8.9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"/><path fill="#FBBC05" d="M5.3 14.8c-.2-.8-.4-1.6-.4-2.5s.2-1.7.4-2.5L1.6 7C.6 9 0 11.2 0 13.5s.6 4.5 1.6 6.5l3.7-2.9z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.9C3.5 21.4 7.4 24 12 24z"/></svg>
+          Đăng nhập nhanh với Google OAuth
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminCoworkModal({ registry, currentUserEmail, onClose, onSaveRegistry, onSelectInspectUser }) {
+  const me = registry.users[currentUserEmail];
+  const isAdmin = me && me.isAdmin;
+  const [partnerEmail, setPartnerEmail] = useState(me?.partnerEmail || '');
+  const [newPartnerName, setNewPartnerName] = useState('Vợ yêu (User 2)');
+  const [newPartnerPin, setNewPartnerPin] = useState('123456');
+  const [newPin, setNewPin] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const allUsers = Object.values(registry.users || {});
+
+  const linkPartner = (e) => {
+    e.preventDefault();
+    const targetMail = cleanEmail(partnerEmail);
+    if (!targetMail || !targetMail.includes('@')) {
+      setMsg('Vui lòng nhập đúng định dạng Gmail của Vợ / Cộng sự.');
+      return;
+    }
+    if (targetMail === currentUserEmail) {
+      setMsg('Không thể liên kết Co-work với chính Gmail của bạn.');
+      return;
+    }
+    const nextReg = { ...registry, users: { ...registry.users } };
+    if (!nextReg.users[targetMail]) {
+      nextReg.users[targetMail] = {
+        email: targetMail,
+        name: newPartnerName.trim() || 'Vợ (User 2)',
+        pinHash: hashPin(newPartnerPin || '123456'),
+        isAdmin: false,
+        partnerEmail: currentUserEmail,
+        createdAt: toISO(TODAY),
+        data: makeEmptyUserData(),
+      };
+    } else {
+      nextReg.users[targetMail] = { ...nextReg.users[targetMail], partnerEmail: currentUserEmail };
+    }
+    nextReg.users[currentUserEmail] = { ...nextReg.users[currentUserEmail], partnerEmail: targetMail };
+    onSaveRegistry(nextReg);
+    setMsg(`Đã liên kết Co-work 2 vợ chồng thành công với ${targetMail}!`);
+  };
+
+  const changeMyPin = (e) => {
+    e.preventDefault();
+    if (newPin.length < 4) {
+      setMsg('Mã PIN mới phải có ít nhất 4 ký tự.');
+      return;
+    }
+    const nextReg = { ...registry, users: { ...registry.users, [currentUserEmail]: { ...me, pinHash: hashPin(newPin) } } };
+    onSaveRegistry(nextReg);
+    setNewPin('');
+    setMsg('Đã đổi mã PIN / Mật khẩu của bạn thành công!');
+  };
+
+  const toggleUserAdmin = (uMail) => {
+    if (uMail === currentUserEmail) return;
+    const target = registry.users[uMail];
+    onSaveRegistry({ ...registry, users: { ...registry.users, [uMail]: { ...target, isAdmin: !target.isAdmin } } });
+  };
+
+  const resetUserPin = (uMail) => {
+    const target = registry.users[uMail];
+    onSaveRegistry({ ...registry, users: { ...registry.users, [uMail]: { ...target, pinHash: hashPin('123456') } } });
+    setMsg(`Đã đặt lại mã PIN của ${uMail} về mặc định: 123456`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 grid place-items-center" style={{ padding: OVERLAY_PAD }} role="dialog" aria-modal="true">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-full overflow-y-auto border-t-4 border-indigo-600 p-5 space-y-5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600"><Icon name="users" size={18} /></span>
+            <div>
+              <h2 className="font-extrabold text-slate-900 text-base">Quản lý Co-work 2 Vợ Chồng &amp; Tài khoản</h2>
+              <p className="text-xs text-slate-500">Đang đăng nhập: <b>{me?.name}</b> ({currentUserEmail}) {isAdmin && <span className="text-rose-600 font-bold">· 👑 ADMIN TỐI THƯỢNG</span>}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><Icon name="x" /></button>
+        </div>
+
+        {msg && <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">{msg}</div>}
+
+        <form onSubmit={linkPartner} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+            💑 Thiết lập Co-work (Gộp tài sản User 1 &amp; User 2)
+          </h3>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Nhập Gmail của Vợ (User 2). Nếu Vợ bạn chưa từng đăng nhập, hệ thống sẽ <b>tự động tạo sẵn hồ sơ cho Vợ</b> để bạn nhập liệu trước hoặc để Vợ đăng nhập bằng Gmail đó trên máy của Vợ.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-2.5">
+            <div className="sm:col-span-1">
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Gmail của Vợ (User 2)</label>
+              <input type="email" value={partnerEmail} onChange={(e) => setPartnerEmail(e.target.value)} placeholder="vo@gmail.com" className={`${FIELD} bg-white`} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Tên hiển thị User 2</label>
+              <input type="text" value={newPartnerName} onChange={(e) => setNewPartnerName(e.target.value)} placeholder="Vợ yêu" className={`${FIELD} bg-white`} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">PIN mặc định (nếu tạo mới)</label>
+              <input type="text" value={newPartnerPin} onChange={(e) => setNewPartnerPin(e.target.value)} placeholder="123456" className={`${FIELD} bg-white tnum`} />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" className="text-xs font-bold px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+              Lưu liên kết Co-work 2 Vợ Chồng
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={changeMyPin} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">🔑 Đổi mã PIN / Mật khẩu của bạn</label>
+            <input type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} placeholder="Nhập mã PIN mới (tối thiểu 4 ký tự)" className={`${FIELD} bg-white`} />
+          </div>
+          <button type="submit" className="text-xs font-bold px-4 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-slate-700">
+            Cập nhật mã PIN
+          </button>
+        </form>
+
+        {isAdmin && (
+          <div className="p-4 rounded-2xl bg-rose-50/50 border border-rose-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+                👑 Bảng điều khiển Admin Tối Thượng ({allUsers.length} người dùng)
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">Toàn quyền hệ thống</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] uppercase text-slate-500 border-b border-rose-200">
+                    <th className="py-1.5 text-left">Người dùng / Gmail</th>
+                    <th className="py-1.5 text-right">Tổng TS</th>
+                    <th className="py-1.5 text-right">TS Ròng</th>
+                    <th className="py-1.5 text-left pl-3">Co-work với</th>
+                    <th className="py-1.5 text-right">Thao tác Admin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allUsers.map((u) => {
+                    const uc = compute(normalizeData(u.data));
+                    return (
+                      <tr key={u.email} className="border-b border-rose-100/80">
+                        <td className="py-2">
+                          <div className="font-bold text-slate-900 flex items-center gap-1">
+                            {u.name} {u.isAdmin && <span className="text-[9px] px-1.5 py-0.2 bg-rose-600 text-white rounded">ADMIN</span>}
+                          </div>
+                          <div className="text-[11px] text-slate-500">{u.email}</div>
+                        </td>
+                        <td className="py-2 text-right font-bold tnum">{compact(uc.total)}</td>
+                        <td className="py-2 text-right font-extrabold text-indigo-700 tnum">{compact(uc.net)}</td>
+                        <td className="py-2 pl-3 text-[11px] text-slate-600">{u.partnerEmail || '—'}</td>
+                        <td className="py-2 text-right space-x-1 whitespace-nowrap">
+                          <button type="button" onClick={() => { onSelectInspectUser(u.email); onClose(); }}
+                            className="text-[10px] font-bold px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500">
+                            Xem hồ sơ
+                          </button>
+                          <button type="button" onClick={() => resetUserPin(u.email)}
+                            className="text-[10px] font-bold px-2 py-1 rounded bg-amber-100 text-amber-800 hover:bg-amber-200" title="Đặt lại PIN về 123456">
+                            Reset PIN
+                          </button>
+                          {u.email !== currentUserEmail && (
+                            <button type="button" onClick={() => toggleUserAdmin(u.email)}
+                              className="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300">
+                              {u.isAdmin ? 'Gỡ Admin' : 'Cấp Admin'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const PTABS = [
+  { k: 'overview', label: 'Tổng quan', icon: 'home' },
+  { k: 'portfolio', label: 'Danh mục', icon: 'pie' },
+  { k: 'cash', label: 'Chi tiêu', icon: 'wallet' },
+  { k: 'goals', label: 'Mục tiêu', icon: 'target' },
+];
+const PTITLES = { overview: 'Tổng quan gia sản', portfolio: 'Danh mục đầu tư', cash: 'Chi tiêu & tài sản', goals: 'Mục tiêu tài chính' };
+
+function App() {
+  const [view, setView] = useState(loadView);
+  const [registry, setRegistry] = useState({ version: 3, users: {} });
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const [workspaceMode, setWorkspaceMode] = useState('user1');
+  const [inspectEmail, setInspectEmail] = useState('');
+  const [authStatus, setAuthStatus] = useState('checking');
+  const [legacyCipher, setLegacyCipher] = useState(null);
+  const [legacyPlain, setLegacyPlain] = useState(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+
+  const [sync, setSync] = useState(window.supabaseClient ? 'loading' : 'offline');
+  const [live, setLive] = useState(false);
+  const [tab, setTab] = useState('overview');
+  const [history, setHistory] = useState(() => loadHistory());
+  const [dark, setDark] = useDarkMode();
+
+  const narrow = useNarrow();
+  const client = window.supabaseClient;
+  const regRef = useRef(registry);
+  regRef.current = registry;
+  const lastSaved = useRef('');
+  const saveTimer = useRef(null);
+  const scrollRef = useRef(null);
+
+  const eff = view === 'auto' ? (narrow ? 'phone' : 'auto') : view;
+  const isPhone = eff === 'phone';
+  const framed = isPhone && !narrow;
+
+  // 1. TẢI DỮ LIỆU ĐÁM MÂY SUPABASE & KIỂM TRA PHIÊN ĐĂNG NHẬP
+  const loadRemote = useCallback(async () => {
+    if (window.location.search.includes('error=') || window.location.hash.includes('error=')) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    let loadedReg = null;
+    if (client) {
+      try {
+        const { data: row, error } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
+        if (error) throw error;
+        if (row && row.json_data) {
+          const jd = row.json_data;
+          if (jd.v3_vault) {
+            const bytes = CryptoJS.AES.decrypt(jd.v3_vault, CLOUD_SECRET);
+            const str = bytes.toString(CryptoJS.enc.Utf8);
+            if (str) loadedReg = JSON.parse(str);
+          } else if (jd.version === 3 && jd.users) {
+            loadedReg = jd;
+          } else if (jd.ciphertext) {
+            setLegacyCipher(jd.ciphertext);
+          } else {
+            setLegacyPlain(normalizeData(jd));
+          }
+        }
+        setSync('ready');
+      } catch (e) {
+        console.error('Lỗi tải dữ liệu Supabase:', e);
+        setSync('error');
+      }
+    }
+
+    if (!loadedReg) {
+      try {
+        const localRaw = JSON.parse(localStorage.getItem(KEY) || 'null');
+        if (localRaw && localRaw.v3_vault) {
+          const bytes = CryptoJS.AES.decrypt(localRaw.v3_vault, CLOUD_SECRET);
+          loadedReg = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+        }
+      } catch (err) {}
+    }
+
+    let oauthUser = null;
+    if (client) {
+      try {
+        const { data: sessionData } = await client.auth.getSession();
+        oauthUser = sessionData?.session?.user || null;
+      } catch (err) {}
+    }
+
+    if (oauthUser && oauthUser.email) {
+      const gEmail = cleanEmail(oauthUser.email);
+      const gName = oauthUser.user_metadata?.full_name || gEmail.split('@')[0];
+      const baseUsers = (loadedReg && loadedReg.users) ? loadedReg.users : {};
+      const hasAnyUser = Object.keys(baseUsers).length > 0;
+
+      const nextReg = {
+        version: 3,
+        users: {
+          ...baseUsers,
+          [gEmail]: baseUsers[gEmail] || {
+            email: gEmail,
+            name: gName,
+            pinHash: hashPin('123456'),
+            isAdmin: !hasAnyUser,
+            partnerEmail: '',
+            createdAt: toISO(TODAY),
+            data: !hasAnyUser && legacyPlain ? legacyPlain : makeDefaultData(),
+          }
+        }
+      };
+      lastSaved.current = JSON.stringify(nextReg);
+      setRegistry(nextReg);
+      setCurrentUserEmail(gEmail);
+      sessionStorage.setItem(SESSION_KEY, gEmail);
+      setAuthStatus('authenticated');
+      return;
+    }
+
+    if (loadedReg && loadedReg.users) {
+      lastSaved.current = JSON.stringify(loadedReg);
+      setRegistry(loadedReg);
+      const savedSession = cleanEmail(sessionStorage.getItem(SESSION_KEY) || '');
+      if (savedSession && loadedReg.users[savedSession]) {
+        setCurrentUserEmail(savedSession);
+        setAuthStatus('authenticated');
+      } else {
+        setAuthStatus('login');
+      }
+    } else {
+      setAuthStatus('login');
+    }
+  }, [client, legacyPlain]);
+
+  useEffect(() => {
+    loadRemote();
+    if (!client) return undefined;
+    const { data: authListener } = client.auth.onAuthStateChange((event, session) => {
+      if (session && session.user && session.user.email) {
+        const gEmail = cleanEmail(session.user.email);
+        const gName = session.user.user_metadata?.full_name || gEmail.split('@')[0];
+        setRegistry((prev) => {
+          const hasAnyUser = Object.keys(prev.users || {}).length > 0;
+          if (prev.users && prev.users[gEmail]) return prev;
+          return {
+            version: 3,
+            users: {
+              ...(prev.users || {}),
+              [gEmail]: {
+                email: gEmail, name: gName, pinHash: hashPin('123456'),
+                isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY),
+                data: makeDefaultData(),
+              }
+            }
+          };
+        });
+        setCurrentUserEmail(gEmail);
+        sessionStorage.setItem(SESSION_KEY, gEmail);
+        setAuthStatus('authenticated');
+      }
+    });
+    return () => { if (authListener && authListener.subscription) authListener.subscription.unsubscribe(); };
+  }, [loadRemote, client]);
+
+  // 2. XÁC THỰC ĐĂNG NHẬP / ĐĂNG KÝ GMAIL
+  const handleGmailAuth = ({ mode, email, name, pin, oldPin }) => {
+    const users = registry.users || {};
+    const hasUsers = Object.keys(users).length > 0;
+
+    if (mode === 'login') {
+      const u = users[email];
+      if (!u) return { ok: false, msg: 'Gmail này chưa được đăng ký. Vui lòng chuyển sang tab "Đăng ký Gmail mới".' };
+      if (u.pinHash !== hashPin(pin)) return { ok: false, msg: 'Mã PIN / Mật khẩu không chính xác!' };
+      setCurrentUserEmail(email);
+      sessionStorage.setItem(SESSION_KEY, email);
+      setWorkspaceMode('user1');
+      setAuthStatus('authenticated');
+      return { ok: true };
+    } else {
+      if (users[email]) return { ok: false, msg: 'Gmail này đã tồn tại trên hệ thống. Vui lòng chọn Đăng nhập.' };
+      let initialData = hasUsers ? makeEmptyUserData() : makeDefaultData();
+
+      if (!hasUsers) {
+        if (legacyPlain) {
+          initialData = legacyPlain;
+        } else if (legacyCipher && oldPin) {
+          try {
+            const bytes = CryptoJS.AES.decrypt(legacyCipher, oldPin);
+            const str = bytes.toString(CryptoJS.enc.Utf8);
+            if (str) initialData = normalizeData(JSON.parse(str));
+          } catch (e) {}
+        } else {
+          try {
+            const localLegacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+            if (localLegacy && !localLegacy.ciphertext) initialData = normalizeData(localLegacy);
+          } catch (e) {}
+        }
+      }
+
+      const newUser = {
+        email, name, pinHash: hashPin(pin),
+        isAdmin: !hasUsers, partnerEmail: '', createdAt: toISO(TODAY),
+        data: initialData,
+      };
+
+      const nextReg = { version: 3, users: { ...users, [email]: newUser } };
+      setRegistry(nextReg);
+      setCurrentUserEmail(email);
+      sessionStorage.setItem(SESSION_KEY, email);
+      setWorkspaceMode('user1');
+      setAuthStatus('authenticated');
+      return { ok: true };
+    }
+  };
+
+  const handleGoogleOAuth = async () => {
+    if (!client) return;
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin + window.location.pathname }
+      });
+      if (error) alert('Không thể gọi Google OAuth: ' + error.message);
+    } catch (e) {
+      alert('Vui lòng nhập trực tiếp địa chỉ Gmail và mã PIN ở khung bên trên để đăng nhập.');
+    }
+  };
+
+  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ
+  const meUser = registry.users?.[currentUserEmail] || null;
+  const partnerEmail = meUser?.partnerEmail ? cleanEmail(meUser.partnerEmail) : '';
+  const partnerUser = partnerEmail && registry.users?.[partnerEmail] ? registry.users[partnerEmail] : null;
+
+  const activeData = useMemo(() => {
+    if (!meUser) return makeDefaultData();
+    if (workspaceMode === 'user2' && partnerUser) return normalizeData(partnerUser.data);
+    if (workspaceMode === 'combined' && partnerUser) {
+      return mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email);
+    }
+    if (workspaceMode === 'admin_inspect' && inspectEmail && registry.users?.[inspectEmail]) {
+      return normalizeData(registry.users[inspectEmail].data);
+    }
+    return normalizeData(meUser.data);
+  }, [meUser, partnerUser, workspaceMode, inspectEmail, registry.users]);
+
+  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH
+  const setData = useCallback((updater) => {
+    setRegistry((prev) => {
+      const curMe = prev.users?.[currentUserEmail];
+      if (!curMe) return prev;
+      const pMail = curMe.partnerEmail ? cleanEmail(curMe.partnerEmail) : '';
+      const curPartner = pMail ? prev.users?.[pMail] : null;
+
+      if (workspaceMode === 'user1' || (!curPartner && workspaceMode !== 'admin_inspect')) {
+        const updated = updater(normalizeData(curMe.data));
+        return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: updated } } };
+      }
+
+      if (workspaceMode === 'user2' && curPartner) {
+        const updated = updater(normalizeData(curPartner.data));
+        return { ...prev, users: { ...prev.users, [pMail]: { ...curPartner, data: updated } } };
+      }
+
+      if (workspaceMode === 'admin_inspect' && inspectEmail && prev.users?.[inspectEmail]) {
+        const targetU = prev.users[inspectEmail];
+        const updated = updater(normalizeData(targetU.data));
+        return { ...prev, users: { ...prev.users, [inspectEmail]: { ...targetU, data: updated } } };
+      }
+
+      if (workspaceMode === 'combined' && curPartner) {
+        const d1 = normalizeData(curMe.data);
+        const d2 = normalizeData(curPartner.data);
+        const mergedBefore = mergeCoupleData(d1, d2, curMe.name, curPartner.name, curMe.email, curPartner.email);
+        const mergedAfter = updater(mergedBefore);
+
+        const splitList = (list) => {
+          const u1List = [], u2List = [];
+          (list || []).forEach((item) => {
+            const cleanItem = { ...item };
+            if (item._owner === pMail) {
+              cleanItem.name = String(cleanItem.name || '').replace(` (${curPartner.name})`, '').replace(` [${curPartner.name}]`, '');
+              u2List.push(cleanItem);
+            } else {
+              cleanItem.name = String(cleanItem.name || '').replace(` (${curMe.name})`, '').replace(` [${curMe.name}]`, '');
+              u1List.push({ ...cleanItem, _owner: curMe.email });
+            }
+          });
+          return [u1List, u2List];
+        };
+
+        const [stocks1, stocks2] = splitList(mergedAfter.stocks);
+        const [gold1, gold2] = splitList(mergedAfter.gold);
+        const [sav1, sav2] = splitList(mergedAfter.savings);
+        const [cat1, cat2] = splitList(mergedAfter.categories);
+        const [goals1, goals2] = splitList(mergedAfter.goals);
+
+        const nextD1 = {
+          ...d1,
+          cash: d1.cash + (mergedAfter.cash - mergedBefore.cash),
+          receivable: d1.receivable + (mergedAfter.receivable - mergedBefore.receivable),
+          estate: d1.estate + (mergedAfter.estate - mergedBefore.estate),
+          income: d1.income + (mergedAfter.income - mergedBefore.income),
+          budget: d1.budget + (mergedAfter.budget - mergedBefore.budget),
+          fireTarget: d1.fireTarget + (mergedAfter.fireTarget - mergedBefore.fireTarget),
+          debts: {
+            risk: Math.max(0, d1.debts.risk + (mergedAfter.debts.risk - mergedBefore.debts.risk)),
+            safe: Math.max(0, d1.debts.safe + (mergedAfter.debts.safe - mergedBefore.debts.safe)),
+            fixed: Math.max(0, d1.debts.fixed + (mergedAfter.debts.fixed - mergedBefore.debts.fixed)),
+          },
+          targets: mergedAfter.targets,
+          recMode: mergedAfter.recMode,
+          stocks: stocks1, gold: gold1, savings: sav1, categories: cat1, goals: goals1,
+        };
+
+        const nextD2 = { ...d2, stocks: stocks2, gold: gold2, savings: sav2, categories: cat2, goals: goals2 };
+
+        return {
+          ...prev,
+          users: {
+            ...prev.users,
+            [currentUserEmail]: { ...curMe, data: nextD1 },
+            [pMail]: { ...curPartner, data: nextD2 },
+          }
+        };
+      }
+
+      return prev;
+    });
+  }, [currentUserEmail, workspaceMode, inspectEmail]);
+
+  const c = useMemo(() => compute(activeData), [activeData]);
+
+  // 5. GHI LỊCH SỬ TÀI SẢN RÒNG & ĐỒNG BỘ MÃ HÓA ĐA LUỒNG (WEB WORKER)
+  const historyScope = `${currentUserEmail || 'default'}-${workspaceMode}`;
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    const snap = saveSnapshot(c, historyScope);
+    setHistory(snap);
+  }, [authStatus, historyScope, c.total, c.debt, c.net]);
+
+  const flush = useCallback(async () => {
+    if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
+    if (!client) return;
+
+    const myEmail = currentUserEmail;
+    const myUserObj = regRef.current.users[myEmail];
+    if (!myUserObj) return;
+
+    setSync('saving');
+    try {
+      const { data: row, error: fetchErr } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
+      if (fetchErr) throw fetchErr;
+
+      let latestReg = regRef.current;
+      if (row && row.json_data && row.json_data.v3_vault) {
+        const bytes = CryptoJS.AES.decrypt(row.json_data.v3_vault, CLOUD_SECRET);
+        const str = bytes.toString(CryptoJS.enc.Utf8);
+        if (str) {
+          const cloudReg = JSON.parse(str);
+          const nextUsers = { ...cloudReg.users, [myEmail]: myUserObj };
+          if (workspaceMode === 'user2' || workspaceMode === 'combined') {
+            const pMail = myUserObj.partnerEmail ? cleanEmail(myUserObj.partnerEmail) : '';
+            if (pMail && regRef.current.users[pMail]) nextUsers[pMail] = regRef.current.users[pMail];
+          }
+          if (workspaceMode === 'admin_inspect' && inspectEmail && regRef.current.users[inspectEmail]) {
+            nextUsers[inspectEmail] = regRef.current.users[inspectEmail];
+          }
+          latestReg = { ...cloudReg, users: nextUsers };
+        }
+      }
+
+      const strToSave = JSON.stringify(latestReg);
+      if (strToSave === lastSaved.current) {
+        setSync('ready');
+        return;
+      }
+
+      // MÃ HÓA BẤT ĐỒNG BỘ TRÊN WEB WORKER (0ms Lag)
+      const v3_vault = await window.encryptVaultAsync(strToSave, CLOUD_SECRET);
+      const { error: upsertErr } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
+      if (upsertErr) throw upsertErr;
+
+      lastSaved.current = strToSave;
+      try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
+
+      setRegistry(latestReg);
+      setSync('ready');
+    } catch (err) {
+      console.error('Lỗi lưu Supabase:', err);
+      setSync('error');
+    }
+  }, [authStatus, client, currentUserEmail, workspaceMode, inspectEmail]);
+
+  // DEBOUNCE ĐỒNG BỘ: Không mã hóa trên từng phím gõ nữa, gom vào 1 luồng chờ duy nhất
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !Object.keys(registry.users || {}).length) return undefined;
+    const str = JSON.stringify(registry);
+    if (str === lastSaved.current) return undefined;
+
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      if (client) {
+        await flush();
+      } else {
+        const v3_vault = await window.encryptVaultAsync(str, CLOUD_SECRET);
+        try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
+      }
+    }, 2000);
+    return () => clearTimeout(saveTimer.current);
+  }, [registry, authStatus, client, flush]);
+
+  const retry = () => {
+    if (authStatus === 'authenticated') flush();
+    else loadRemote();
+  };
+
+  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) { return; } }, [view]);
+  useEffect(() => {
+    if (!live) return undefined;
+    const t = setInterval(() => { setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) })); }, 4000);
+    return () => clearInterval(t);
+  }, [live, setData]);
+  useEffect(() => {
+    if (!isPhone || authStatus !== 'authenticated') return undefined;
+    document.documentElement.classList.add('lock');
+    document.body.classList.add('lock');
+    return () => { document.documentElement.classList.remove('lock'); document.body.classList.remove('lock'); };
+  }, [isPhone, authStatus]);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab, isPhone]);
+
+  const handleLogout = async () => {
+    sessionStorage.removeItem(SESSION_KEY);
+    if (client) {
+      try { await client.auth.signOut(); } catch (e) {}
+    }
+    setCurrentUserEmail('');
+    setAuthStatus('login');
+  };
+
+  if (authStatus === 'checking') {
+    return <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-500 font-bold">Đang đồng bộ hệ thống đám mây...</div>;
+  }
+
+  if (authStatus === 'login' || !meUser) {
+    const hasUsers = Object.keys(registry.users || {}).length > 0;
+    return (
+      <GmailAuthScreen
+        hasUsers={hasUsers}
+        legacyCipher={legacyCipher}
+        onAuthSuccess={handleGmailAuth}
+        onGoogleOAuth={handleGoogleOAuth}
+      />
+    );
+  }
+
+  const allUsersList = Object.values(registry.users || {});
+  const combinedNet = useMemo(() => {
+    if (!partnerUser) return c.net;
+    return compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net;
+  }, [meUser, partnerUser, c.net]);
+
+  const coworkToolbar = (
+    <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:px-3.5 flex flex-col gap-2 shadow-sm no-print">
+      <div className="flex items-center gap-1.5 overflow-x-auto thin-scroll pb-1">
+        <button
+          type="button"
+          onClick={() => setWorkspaceMode('user1')}
+          className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user1' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+        >
+          👤 User 1: {meUser.name}
+        </button>
+
+        {partnerUser ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setWorkspaceMode('user2')}
+              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user2' ? 'bg-pink-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
+              👩 User 2: {partnerUser.name}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkspaceMode('combined')}
+              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${workspaceMode === 'combined' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}
+            >
+              💑 Tổng 2 VC ({compact(combinedNet)})
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAdminModal(true)}
+            className="shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100"
+          >
+            + Liên kết Vợ (User 2)
+          </button>
+        )}
+
+        {meUser.isAdmin && allUsersList.length > 1 && (
+          <select
+            aria-label="Admin xem hồ sơ thành viên"
+            value={workspaceMode === 'admin_inspect' ? inspectEmail : ''}
+            onChange={(e) => {
+              if (e.target.value) {
+                setInspectEmail(e.target.value);
+                setWorkspaceMode('admin_inspect');
+              } else {
+                setWorkspaceMode('user1');
+              }
+            }}
+            className="shrink-0 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 outline-none cursor-pointer"
+          >
+            <option value="">👑 Admin ({allUsersList.length})</option>
+            {allUsersList.map((u) => (
+              <option key={u.email} value={u.email}>👁️ Xem: {u.name} ({u.email})</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
+        <button
+          type="button"
+          onClick={() => setShowAdminModal(true)}
+          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
+          {meUser.isAdmin ? '👑 Quản trị & Co-work' : '⚙️ Co-work & PIN'}
+        </button>
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Đăng xuất Gmail"
+          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100"
+        >
+          <Icon name="logout" size={13} /> Thoát
+        </button>
+      </div>
+    </div>
+  );
+
+  const outer = V(eff, 'w-full', 'w-full overflow-x-auto thin-scroll', 'w-full overflow-x-hidden');
+  const frame = V(eff, '', 'min-w-[1200px] p-4', 'max-w-[1600px] mx-auto p-3 sm:p-4 overflow-x-hidden');
+  const root = `grid gap-4 ${V(eff, 'grid-cols-1', 'grid-cols-12', 'grid-cols-1 lg:grid-cols-12')}`;
+  const tier = V(eff, '', 'col-span-12', 'lg:col-span-12');
+  const kpiGrid = V(eff, 'grid-cols-2', 'grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]', 'grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]');
+  const netSpan = V(eff, 'col-span-2', '', 'col-span-2 lg:col-span-1');
+  const midGrid = V(eff, 'grid-cols-1', 'grid-cols-[35fr_65fr]', 'grid-cols-1 lg:grid-cols-[35fr_65fr]');
+  const botGrid = V(eff, 'grid-cols-1', 'grid-cols-3', 'grid-cols-1 lg:grid-cols-3');
+  const head = V(eff, 'flex-col', 'flex-row items-end', 'flex-col lg:flex-row lg:items-end');
+
+  const kpiBlock = (
+    <div className={`${tier} grid gap-3 ${kpiGrid}`}>
+      <Kpi small={isPhone} dark className={netSpan} label="Tổng tài sản ròng" sub={vnd(c.net)}><span title={vnd(c.net)}>{big(c.net)}</span></Kpi>
+      <Kpi small={isPhone} label="Tổng tài sản" sub={vnd(c.total)}><span title={vnd(c.total)}>{big(c.total)}</span></Kpi>
+      <Kpi small={isPhone} label="Tổng nợ" sub={`Chiếm ${pcv(c.total > 0 ? (c.debt / c.total) * 100 : 0)} tổng tài sản`} bar={c.total > 0 ? (c.debt / c.total) * 100 : 0} barColor="#f97316"><span className="text-orange-600" title={vnd(c.debt)}>{big(c.debt)}</span></Kpi>
+      <Kpi small={isPhone} className={isPhone ? 'col-span-2' : ''} label="Dòng tiền thặng dư (tháng)" sub={`Thu ${compact(activeData.income)} − chi ${compact(c.spent)} · tiết kiệm ${pcv(activeData.income > 0 ? (c.surplus / activeData.income) * 100 : 0)}`}>
+        <span className={c.surplus >= 0 ? 'text-emerald-600' : 'text-rose-600'} title={vnd(c.surplus)}>{c.surplus >= 0 ? '+ ' : '− '}{fixed2(Math.abs(c.surplus) / 1e6)} triệu</span>
+      </Kpi>
+      <Kpi small={isPhone} className={isPhone ? 'col-span-2' : ''} label="Mức độ tự do tài chính (FIRE)" sub={activeData.fireTarget > 0 ? `Mục tiêu FIRE ${compact(c.fireTarget)}` : `Tự động: 25 × chi tiêu năm = ${compact(c.fireTarget)}`} bar={c.firePct} barColor="#4f46e5"
+        extra={
+          <div className="flex items-center gap-1.5 mt-2">
+            <label htmlFor="fire-target" className="text-[10px] font-bold text-slate-500 shrink-0">Mục tiêu FIRE</label>
+            <NumInput id="fire-target" blankZero value={activeData.fireTarget} placeholder="Tự động" onChange={(v) => setData((d) => ({ ...d, fireTarget: v }))} className="w-full min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white" />
+          </div>
+        }>
+        <span className="text-indigo-700">{pcv(c.firePct, c.firePct < 10 ? 1 : 0)} <span className="text-sm font-bold text-slate-500">mục tiêu</span></span>
+      </Kpi>
+    </div>
+  );
+
+  const allocation = <AllocationCard data={activeData} setData={setData} c={c} view={eff} />;
+  const balance = <BalanceCard data={activeData} setData={setData} c={c} />;
+  const portfolio = <Portfolio data={activeData} setData={setData} c={c} live={live} setLive={setLive} view={eff} isCombined={workspaceMode === 'combined'} />;
+  const topAssets = <TopAssetsCard data={activeData} c={c} />;
+  const spending = <SpendingCard data={activeData} setData={setData} c={c} view={eff} />;
+  const goals = <GoalsCard data={activeData} setData={setData} c={c} />;
+
+  const activeTitle = workspaceMode === 'combined' && partnerUser
+    ? `TỔNG GIA SẢN 2 VỢ CHỒNG (${meUser.name.toUpperCase()} & ${partnerUser.name.toUpperCase()})`
+    : workspaceMode === 'user2' && partnerUser
+    ? `BÁO CÁO GIA SẢN · ${partnerUser.name.toUpperCase()}`
+    : workspaceMode === 'admin_inspect' && inspectEmail
+    ? `HỒ SƠ THÀNH VIÊN · ${registry.users[inspectEmail]?.name.toUpperCase()}`
+    : `BÁO CÁO TỔNG QUAN GIA SẢN · ${meUser.name.toUpperCase()}`;
+
+  if (isPhone) {
+    const shell = (
+      <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
+        {framed && <StatusBar />}
+        <header className="shrink-0 bg-white border-b border-slate-200 px-4 pb-2.5 flex items-center justify-between gap-2" style={{ paddingTop: framed ? 4 : 'max(10px, env(safe-area-inset-top, 0px))' }}>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold tracking-widest text-indigo-600">
+              WEALTHOS PRO · {meUser.isAdmin ? 'ADMIN' : 'GIA SẢN'}
+            </p>
+            <h1 className="text-[15px] leading-tight font-extrabold text-slate-900 truncate">{PTITLES[tab]}</h1>
+            <SyncBadge sync={sync} onRetry={retry} />
+          </div>
+          <div className="flex items-center gap-1 no-print">
+            <button type="button" onClick={() => setDark(d => !d)} title={dark ? 'Sáng' : 'Tối'}
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition" aria-label="Đổi giao diện">
+              <Icon name={dark ? 'sparkles' : 'moon'} size={16} />
+            </button>
+            <button type="button" onClick={() => window.print()} title="In / PDF"
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition" aria-label="In báo cáo">
+              <Icon name="print" size={16} />
+            </button>
+            <ViewSwitcher view={view} setView={setView} compact />
+          </div>
+        </header>
+        <main ref={scrollRef} className="app-scroll flex-1 min-h-0 px-3 py-3 space-y-3">
+          {coworkToolbar}
+          {tab === 'overview' && <div className="space-y-3">{kpiBlock}<NetWorthCard history={history} />{allocation}{balance}</div>}
+          {tab === 'portfolio' && <div className="space-y-3">{portfolio}</div>}
+          {tab === 'cash' && <div className="space-y-3">{spending}{topAssets}</div>}
+          {tab === 'goals' && <div className="space-y-3">{goals}</div>}
+          <div className="h-2" />
+        </main>
+        <nav aria-label="Điều hướng" className="shrink-0 grid grid-cols-4 bg-white border-t border-slate-200" style={{ paddingBottom: framed ? 10 : 'max(6px, env(safe-area-inset-bottom, 0px))' }}>
+          {PTABS.map((t) => (
+            <button key={t.k} type="button" onClick={() => setTab(t.k)} aria-current={tab === t.k ? 'page' : undefined}
+              className={`flex flex-col items-center gap-0.5 pt-2 pb-1 text-[10px] font-bold ${tab === t.k ? 'text-indigo-600' : 'text-slate-400'}`}>
+              <Icon name={t.icon} size={20} />{t.label}
+            </button>
+          ))}
+        </nav>
+        {showAdminModal && (
+          <AdminCoworkModal
+            registry={registry}
+            currentUserEmail={currentUserEmail}
+            onClose={() => setShowAdminModal(false)}
+            onSaveRegistry={(nextReg) => setRegistry(nextReg)}
+            onSelectInspectUser={(uMail) => { setInspectEmail(uMail); setWorkspaceMode('admin_inspect'); }}
+          />
+        )}
+      </div>
+    );
+    if (!framed) return <div className="fixed inset-0 w-full">{shell}</div>;
+    return (
+      <div className="min-h-screen w-full grid place-items-center bg-slate-200 p-4 overflow-hidden">
+        <div className="relative rounded-[56px] bg-slate-900 p-[10px] shadow-2xl" style={{ width: 410 }}>
+          <div className="relative overflow-hidden rounded-[46px] bg-white" style={{ height: 'min(830px, calc(100dvh - 56px))', transform: 'translateZ(0)' }}>
+            <div className="absolute left-1/2 top-2 z-40 h-[26px] w-[92px] -translate-x-1/2 rounded-full bg-black" aria-hidden="true" />
+            {shell}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-2 sm:p-4 overflow-x-hidden">
+      <div className={outer}>
+        <div className={frame}>
+          <div className={root}>
+            <div className={tier}>{coworkToolbar}</div>
+
+            <header className={`${tier} flex ${head} justify-between gap-3`}>
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-indigo-600">
+                  <Icon name="layers" size={14} />WEALTHOS PRO · {meUser.isAdmin ? 'ADMIN TỐI THƯỢNG' : 'QUẢN LÝ GIA SẢN & TỰ DO TÀI CHÍNH'}
+                </p>
+                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-1">{activeTitle}</h1>
+                <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <SyncBadge sync={sync} onRetry={retry} />
+                  <span>Gmail: <b>{currentUserEmail}</b> · VNĐ · <LiveClock /></span>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 no-print">
+                <DarkToggle dark={dark} setDark={setDark} />
+                <button type="button" onClick={() => window.print()}
+                  title="Xuất PDF / In báo cáo"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-100 transition">
+                  <Icon name="print" size={14} />PDF
+                </button>
+                <ViewSwitcher view={view} setView={setView} />
+              </div>
+            </header>
+
+            {kpiBlock}
+
+            <div className={`${tier} grid gap-4 items-start ${midGrid}`}>
+              {allocation}
+              {balance}
+            </div>
+
+            <div className={tier}><NetWorthCard history={history} /></div>
+
+            <div className={tier}>{portfolio}</div>
+
+            <div className={`${tier} grid gap-4 items-start ${botGrid}`}>
+              {topAssets}
+              {spending}
+              {goals}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showAdminModal && (
+        <AdminCoworkModal
+          registry={registry}
+          currentUserEmail={currentUserEmail}
+          onClose={() => setShowAdminModal(false)}
+          onSaveRegistry={(nextReg) => setRegistry(nextReg)}
+          onSelectInspectUser={(uMail) => { setInspectEmail(uMail); setWorkspaceMode('admin_inspect'); }}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>
