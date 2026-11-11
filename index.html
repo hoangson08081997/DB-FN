@@ -943,8 +943,11 @@ function portfolioInsights(tabKey, data, c) {
     if (list.length >= 2 && bs >= 60) out.push({ tone: 'warn', head: 'Tập trung ngân hàng.', body: `${topB.bank || '(chưa đặt tên)'} giữ ${pcv(bs, 0)} tiền gửi, nên cân nhắc chia sang ngân hàng khác.` });
   }
   return out;
-}
-
+}const TABS = [
+  { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã cổ phiếu' },
+  { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm loại vàng' },
+  { key: 'savings', label: 'Sổ Tiết Kiệm', color: '#0d9488', ink: '#0f766e', cls: 'bank', add: 'Thêm sổ tiết kiệm' },
+];
 const Portfolio = memo(function Portfolio({ data, setData, c, view, isCombined }) {
   const [tabKey, setTabKey] = useState('stocks');
   const [adding, setAdding] = useState(false);
