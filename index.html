@@ -19,51 +19,32 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <script>
-    window.SUPA_URL = 'https://bxcroowxyxndqeqeecjz.supabase.co';
-    window.SUPA_KEY = 'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V';
-
+    // ── Cấu hình Supabase ─────────────────────────────────────────────
+    window.SUPA_URL  = 'https://bxcroowxyxndqeqeecjz.supabase.co';
+    window.SUPA_KEY  = 'sb_publishable_ShepTC41CRsR_EP-jmakng_lBRypp3V';
+    // ─────────────────────────────────────────────────────────────────
+    // Chặn pinch-to-zoom trên iOS Safari
     ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
       document.addEventListener(name, function (e) { e.preventDefault(); }, { passive: false });
     });
-
+    // Khởi tạo Supabase client. App vẫn chạy offline nếu CDN lỗi.
     window.supabaseClient = null;
     try {
       window.supabaseClient = window.supabase.createClient(window.SUPA_URL, window.SUPA_KEY);
     } catch (e) {
       console.error('Không khởi tạo được Supabase:', e);
     }
+  </script>
 
-    // Web Worker mã hóa AES-256 chạy ngầm (Giải phóng luồng giao diện chính)
-    window.encryptVaultAsync = function (plainStr, secret) {
-      if (!window.Worker) return Promise.resolve(CryptoJS.AES.encrypt(plainStr, secret).toString());
-      if (!window._cryptoWorker) {
-        const code = `
-          importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js');
-          self.onmessage = function(e) {
-            const { id, plainStr, secret } = e.data;
-            try { self.postMessage({ id, cipher: CryptoJS.AES.encrypt(plainStr, secret).toString() }); }
-            catch (err) { self.postMessage({ id, error: err.message }); }
-          };
-        `;
-        window._cryptoWorker = new Worker(URL.createObjectURL(new Blob([code], { type: 'application/javascript' })));
-        window._cryptoMap = {};
-        window._cryptoWorker.onmessage = function (e) {
-          const { id, cipher, error } = e.data;
-          if (window._cryptoMap[id]) {
-            error ? window._cryptoMap[id].reject(new Error(error)) : window._cryptoMap[id].resolve(cipher);
-            delete window._cryptoMap[id];
-          }
-        };
-      }
-      return new Promise((resolve, reject) => {
-        const id = Math.random().toString(36).slice(2);
-        window._cryptoMap[id] = { resolve, reject };
-        window._cryptoWorker.postMessage({ id, plainStr, secret });
-      });
-    };
-
+  <script>
     tailwind.config = {
-      theme: { extend: { fontFamily: { sans: ['"Be Vietnam Pro"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'] } } }
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Be Vietnam Pro"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif']
+          }
+        }
+      }
     };
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
@@ -80,6 +61,7 @@
       font-size: 14px; -webkit-text-size-adjust: 100%;
       overscroll-behavior-x: none; touch-action: manipulation;
     }
+    /* Chế độ app (iPhone): khóa trang, chỉ vùng nội dung bên trong được cuộn dọc */
     html.lock { overflow: hidden; height: 100%; }
     body.lock { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; touch-action: pan-y; }
     .app-scroll {
@@ -87,6 +69,7 @@
       -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-width: none;
     }
     .app-scroll::-webkit-scrollbar { display: none; }
+    /* Ngăn iOS tự động zoom khi chạm vào ô input có font < 16px */
     @media screen and (max-width: 768px) {
       input, select, textarea { font-size: 16px !important; }
     }
@@ -96,14 +79,18 @@
     .thin-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
-    /* Dark mode */
-    [data-theme="dark"] { --bg: #0f172a; --ink: #f1f5f9; --accent: #818cf8; color-scheme: dark; }
+    /* ── Dark mode ── */
+    [data-theme="dark"] {
+      --bg: #0f172a; --ink: #f1f5f9; --accent: #818cf8;
+      color-scheme: dark;
+    }
     [data-theme="dark"] body { background: var(--bg); color: var(--ink); }
     [data-theme="dark"] .bg-white { background: #1e293b !important; }
     [data-theme="dark"] .bg-slate-50 { background: #0f172a !important; }
     [data-theme="dark"] .bg-slate-100 { background: #1e293b !important; }
     [data-theme="dark"] .bg-slate-200 { background: #334155 !important; }
-    [data-theme="dark"] .border-slate-100, [data-theme="dark"] .border-slate-200 { border-color: #334155 !important; }
+    [data-theme="dark"] .border-slate-100 { border-color: #334155 !important; }
+    [data-theme="dark"] .border-slate-200 { border-color: #334155 !important; }
     [data-theme="dark"] .text-slate-900, [data-theme="dark"] .text-slate-800 { color: #f1f5f9 !important; }
     [data-theme="dark"] .text-slate-700 { color: #cbd5e1 !important; }
     [data-theme="dark"] .text-slate-600 { color: #94a3b8 !important; }
@@ -120,11 +107,12 @@
     [data-theme="dark"] .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.5) !important; }
     [data-theme="dark"] .shadow-2xl { box-shadow: 0 25px 50px rgba(0,0,0,0.8) !important; }
 
-    /* Print / Export PDF */
+    /* ── Print / Export PDF ── */
     @media print {
       html, body { background: white !important; color: black !important; }
-      .no-print, header nav { display: none !important; }
+      .no-print { display: none !important; }
       .app-scroll { overflow: visible !important; height: auto !important; }
+      header nav { display: none !important; }
       section { break-inside: avoid; }
       .shadow-sm, .shadow-2xl { box-shadow: none !important; }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -136,7 +124,7 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useMemo, useRef, useCallback, memo } = React;
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 const KEY = 'wealthos-multiuser-v3';
 const LEGACY_KEY = 'wealthos-gia-san-data-v2';
@@ -147,10 +135,13 @@ const THEME_KEY = 'wealthos-theme';
 const CLOUD_SECRET = 'wealthos-e2ee-master-vault-2026';
 const MAX_HISTORY = 180;
 
-const NF = new Intl.NumberFormat('vi-VN');
 const uid = () => Math.random().toString(36).slice(2, 9);
 const num = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
-const fmt = (n) => NF.format(Math.round(num(n)));
+const fmt = (n) => {
+  const v = Math.round(num(n));
+  const s = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (v < 0 ? '-' : '') + s;
+};
 const vnd = (n) => fmt(n) + ' ₫';
 const trim2 = (x) => String(Math.round(x * 100) / 100).replace('.', ',');
 const fixed2 = (x) => x.toFixed(2).replace('.', ',');
@@ -171,12 +162,18 @@ const pcv = (n, d = 1) => (Number.isFinite(n) ? n : 0).toFixed(d).replace('.', '
 const sum = (arr, f) => arr.reduce((s, x) => s + num(f(x)), 0);
 const noon = (d) => { const x = new Date(d); x.setHours(12, 0, 0, 0); return x; };
 const TODAY = noon(new Date());
-const toISO = (d) => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+const toISO = (d) => {
+  const x = new Date(d);
+  return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+};
 const parseISO = (s) => { const d = new Date(String(s) + 'T12:00:00'); return Number.isNaN(d.getTime()) ? new Date(TODAY) : d; };
 const addMonths = (d, m) => {
-  const x = new Date(d), day = x.getDate();
-  x.setDate(1); x.setMonth(x.getMonth() + m);
-  x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate()));
+  const x = new Date(d);
+  const day = x.getDate();
+  x.setDate(1);
+  x.setMonth(x.getMonth() + m);
+  const last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  x.setDate(Math.min(day, last));
   return x;
 };
 const fmtDate = (d) => String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
@@ -193,7 +190,11 @@ const CLASSES = [
   { key: 'recv', label: 'Nợ phải đòi', group: 'fixed', color: '#8b5cf6', ink: '#6d28d9' },
   { key: 'estate', label: 'Bất động sản', group: 'fixed', color: '#0ea5e9', ink: '#0369a1' },
 ];
-
+const GROUPS = [
+  { key: 'risk', label: 'Tài sản rủi ro', sub: 'Cổ phiếu / Crypto', debtLabel: 'Vay margin', debtColor: '#f97316', debtInk: '#c2410c' },
+  { key: 'safe', label: 'Tài sản an toàn', sub: 'Vàng / Tiền gửi / Tiền mặt', debtLabel: 'Nợ khác (tín chấp)', debtColor: '#eab308', debtInk: '#a16207' },
+  { key: 'fixed', label: 'Tài sản cố định', sub: 'Bất động sản / Nợ phải đòi', debtLabel: 'Vay thế chấp', debtColor: '#dc2626', debtInk: '#b91c1c' },
+];
 const GOAL_SOURCES = [
   { key: 'bank', label: 'Tiền gửi NH', color: '#0d9488', bg: 'bg-teal-50 text-teal-800 border-teal-200' },
   { key: 'cash', label: 'Tiền mặt', color: '#16a34a', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
@@ -210,7 +211,10 @@ const CAT_COLORS = ['#2563eb', '#0d9488', '#d97706', '#db2777', '#7c3aed', '#089
 
 function makeDefaultData() {
   return {
-    cash: 25000000, receivable: 10000000, estate: 2100000000, estateName: 'Căn hộ Happy City',
+    cash: 25000000,
+    receivable: 10000000,
+    estate: 2100000000,
+    estateName: 'Căn hộ Happy City',
     debts: { risk: 30000000, safe: 0, fixed: 1500000000 },
     targets: { stock: 45, gold: 20, bank: 25, cash: 10, recv: 0, estate: 0 },
     stocks: [
@@ -226,7 +230,9 @@ function makeDefaultData() {
       { id: 'b1', bank: 'Vietcombank', principal: 200000000, rate: 5.2, term: 12, start: '2026-03-15' },
       { id: 'b2', bank: 'Techcombank', principal: 150000000, rate: 4.75, term: 6, start: '2026-08-20' },
     ],
-    income: 17000000, budget: 7000000, fireTarget: 0,
+    income: 17000000,
+    budget: 7000000,
+    fireTarget: 0,
     categories: [
       { id: 'c1', name: 'Thiết yếu', color: CAT_COLORS[0], amount: 0, items: [
         { id: 'i1', name: 'Tiền nhà', amount: 2000000 }, { id: 'i2', name: 'Tiền điện', amount: 500000 }, { id: 'i3', name: 'Đổ xăng', amount: 1000000 } ] },
@@ -255,7 +261,8 @@ function makeEmptyUserData() {
       { id: uid(), name: 'Thiết yếu', color: CAT_COLORS[0], amount: 3000000, items: [] },
       { id: uid(), name: 'Sinh hoạt', color: CAT_COLORS[1], amount: 1500000, items: [] },
     ],
-    goals: [], recMode: 'rebalance',
+    goals: [],
+    recMode: 'rebalance',
   };
 }
 
@@ -279,29 +286,45 @@ function normalizeData(raw) {
     items: (Array.isArray(r.items) ? r.items : []).map((it) => ({ id: it.id || uid(), name: String(it.name || ''), amount: num(it.amount) })),
   }));
   out.goals = list('goals').map((r) => ({
-    id: r.id || uid(), name: String(r.name || ''), current: num(r.current), target: num(r.target),
+    id: r.id || uid(),
+    name: String(r.name || ''),
+    current: num(r.current),
+    target: num(r.target),
     deadline: typeof r.deadline === 'string' && r.deadline ? r.deadline : toISO(addMonths(TODAY, 12)),
     source: GOAL_SOURCES.some((s) => s.key === r.source) ? r.source : 'bank',
     priority: [1, 2, 3].includes(num(r.priority)) ? num(r.priority) : 2,
-    _owner: r._owner, _ownerName: r._ownerName,
+    _owner: r._owner,
+    _ownerName: r._ownerName,
   }));
   out.recMode = src.recMode === 'monthly' ? 'monthly' : 'rebalance';
   return out;
 }
 
+// GỘP DỮ LIỆU 2 VỢ CHỒNG (CO-WORK COMBINED DATA)
 function mergeCoupleData(u1Data, u2Data, u1Name, u2Name, u1Email, u2Email) {
-  const d1 = normalizeData(u1Data), d2 = normalizeData(u2Data);
+  const d1 = normalizeData(u1Data);
+  const d2 = normalizeData(u2Data);
   const tag1 = (arr) => arr.map((x) => ({ ...x, _owner: u1Email, _ownerName: u1Name }));
   const tag2 = (arr) => arr.map((x) => ({ ...x, _owner: u2Email, _ownerName: u2Name }));
+
+  const estateNames = [d1.estateName, d2.estateName].filter(Boolean).join(' + ') || 'BĐS Gia đình';
   return {
-    cash: d1.cash + d2.cash, receivable: d1.receivable + d2.receivable, estate: d1.estate + d2.estate,
-    estateName: [d1.estateName, d2.estateName].filter(Boolean).join(' + ') || 'BĐS Gia đình',
-    debts: { risk: d1.debts.risk + d2.debts.risk, safe: d1.debts.safe + d2.debts.safe, fixed: d1.debts.fixed + d2.debts.fixed },
+    cash: d1.cash + d2.cash,
+    receivable: d1.receivable + d2.receivable,
+    estate: d1.estate + d2.estate,
+    estateName: estateNames,
+    debts: {
+      risk: d1.debts.risk + d2.debts.risk,
+      safe: d1.debts.safe + d2.debts.safe,
+      fixed: d1.debts.fixed + d2.debts.fixed,
+    },
     targets: { ...d1.targets },
     stocks: [...tag1(d1.stocks), ...tag2(d2.stocks)],
     gold: [...tag1(d1.gold), ...tag2(d2.gold)],
     savings: [...tag1(d1.savings), ...tag2(d2.savings)],
-    income: d1.income + d2.income, budget: d1.budget + d2.budget, fireTarget: d1.fireTarget + d2.fireTarget,
+    income: d1.income + d2.income,
+    budget: d1.budget + d2.budget,
+    fireTarget: d1.fireTarget + d2.fireTarget,
     categories: [
       ...d1.categories.map((c) => ({ ...c, name: `${c.name} (${u1Name})`, _owner: u1Email, _ownerName: u1Name })),
       ...d2.categories.map((c) => ({ ...c, name: `${c.name} (${u2Name})`, _owner: u2Email, _ownerName: u2Name })),
@@ -328,1283 +351,126 @@ function compute(d) {
   const spent = sum(d.categories, catTotal);
   const net = total - debt;
   const fireTarget = d.fireTarget > 0 ? d.fireTarget : spent * 12 * 25;
+  const groups = GROUPS.map((g) => {
+    const assets = sum(CLASSES.filter((c) => c.group === g.key), (c) => actual[c.key]);
+    return { ...g, assets, debt: d.debts[g.key], equity: assets - d.debts[g.key] };
+  });
   return {
-    stockTotal, goldTotal, bankTotal, actual, total, debt, net, pct, spent, fireTarget,
+    stockTotal,
+    goldTotal,
+    bankTotal,
+    actual,
+    total,
+    debt,
+    net,
+    pct,
+    spent,
+    groups,
+    fireTarget,
     surplus: d.income - spent,
     firePct: fireTarget > 0 ? Math.max(0, (net / fireTarget) * 100) : 0,
     targetSum: sum(CLASSES, (c) => d.targets[c.key])
   };
 }
 
+function simulatePrice(r) {
+  if (!(r.price > 0)) return r;
+  const move = (0.01 + Math.random() * 0.02) * (Math.random() < 0.5 ? -1 : 1);
+  const next = Math.max(10, Math.round((r.price * (1 + move)) / 10) * 10);
+  return { ...r, price: next, dir: next >= r.price ? 1 : -1 };
+}
+
 /* ══════════════════════════════════════════════════
-   DANH MỤC ĐẦU TƯ: TABS & INPUTS
+   NET WORTH HISTORY
    ══════════════════════════════════════════════════ */
-const TABS = [
-  { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã cổ phiếu' },
-  { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm loại vàng' },
-  { key: 'savings', label: 'Sổ Tiết Kiệm', color: '#0d9488', ink: '#0f766e', cls: 'bank', add: 'Thêm sổ tiết kiệm' },
-];
-
-const FIELDS = {
-  stocks: [
-    { k: 'code', l: 'Mã cổ phiếu', kind: 'text', ph: 'VD: FPT', def: '' }, { k: 'qty', l: 'Khối lượng', kind: 'int', def: 0 },
-    { k: 'cost', l: 'Giá vốn trung bình (₫)', kind: 'int', def: 0 }, { k: 'price', l: 'Giá hiện tại (₫)', kind: 'int', def: 0 },
-    { k: 'target', l: '% Target trong nhóm CP', kind: 'dec', def: 0 },
-  ],
-  gold: [
-    { k: 'type', l: 'Loại vàng', kind: 'text', ph: 'VD: SJC, Nhẫn 9999', def: '' }, { k: 'qty', l: 'Số lượng (chỉ)', kind: 'dec', def: 0 },
-    { k: 'cost', l: 'Giá vốn / chỉ (₫)', kind: 'int', def: 0 }, { k: 'price', l: 'Giá hiện tại / chỉ (₫)', kind: 'int', def: 0 },
-    { k: 'target', l: '% Target trong nhóm vàng', kind: 'dec', def: 0 },
-  ],
-  savings: [
-    { k: 'bank', l: 'Ngân hàng (nơi gửi)', kind: 'text', ph: 'VD: ACB', def: '' }, { k: 'principal', l: 'Số tiền gốc (₫)', kind: 'int', def: 0 },
-    { k: 'rate', l: 'Lãi suất (%/năm)', kind: 'dec', def: 0 }, { k: 'term', l: 'Kỳ hạn (tháng)', kind: 'int', def: 6 },
-    { k: 'start', l: 'Ngày gửi', kind: 'date', def: toISO(TODAY) },
-  ],
-};
-const OVERLAY_PAD = 'max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))';
-
-function AddModal({ tab, onSubmit, onClose }) {
-  const cfg = FIELDS[tab.key];
-  const [f, setF] = useState(() => Object.fromEntries(cfg.map((x) => [x.k, x.def])));
-  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const submit = (e) => { e.preventDefault(); onSubmit(f); };
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 grid place-items-center" style={{ padding: OVERLAY_PAD }} role="dialog" aria-modal="true" aria-label={tab.add}>
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-full overflow-y-auto" style={{ borderTop: `4px solid ${tab.color}` }}>
-        <div className="flex items-center justify-between px-5 py-3">
-          <h2 className="font-bold text-slate-900">{tab.add}</h2>
-          <button type="button" onClick={onClose} aria-label="Đóng" className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"><Icon name="x" /></button>
-        </div>
-        <div className="px-5 pb-2 grid sm:grid-cols-2 gap-3">
-          {cfg.map((x, i) => (
-            <div key={x.k} className={x.k === 'code' || x.k === 'type' || x.k === 'bank' ? 'sm:col-span-2' : ''}>
-              <label htmlFor={`add-${x.k}`} className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">{x.l}</label>
-              {x.kind === 'text' && <input id={`add-${x.k}`} autoFocus={i === 0} value={f[x.k]} placeholder={x.ph} onChange={(e) => set(x.k, e.target.value)} className={FIELD} />}
-              {x.kind === 'int' && <NumInput id={`add-${x.k}`} value={f[x.k]} onChange={(v) => set(x.k, v)} className={`${FIELD} text-right tnum`} />}
-              {x.kind === 'dec' && <NumInput id={`add-${x.k}`} decimal value={f[x.k]} onChange={(v) => set(x.k, v)} className={`${FIELD} text-right tnum`} />}
-              {x.kind === 'date' && <input id={`add-${x.k}`} type="date" value={f[x.k]} onChange={(e) => set(x.k, e.target.value || toISO(TODAY))} className={FIELD} />}
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-4">
-          <button type="button" onClick={onClose} className="text-xs font-bold px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">Hủy</button>
-          <button type="submit" className="text-xs font-bold px-4 py-2 rounded-xl text-white hover:opacity-90" style={{ background: tab.color }}>Thêm vào danh mục</button>
-        </div>
-      </form>
-    </div>
-  );
+function loadHistory(scopeKey = '') {
+  try {
+    const k = scopeKey ? `${HISTORY_KEY}-${scopeKey}` : HISTORY_KEY;
+    const raw = JSON.parse(localStorage.getItem(k) || localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch { return []; }
 }
 
-const PH_TEXT = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none focus:border-indigo-400 focus:bg-white';
-const PH_NUM = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
-function PField({ id, label, children }) {
-  return (
-    <div className="min-w-0">
-      <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5 truncate">{label}</label>
-      {children}
-    </div>
-  );
+function saveSnapshot(c, scopeKey = '') {
+  try {
+    const k = scopeKey ? `${HISTORY_KEY}-${scopeKey}` : HISTORY_KEY;
+    const today = toISO(TODAY);
+    const history = loadHistory(scopeKey);
+    if (history.length > 0 && history[history.length - 1].date === today) {
+      history[history.length - 1] = { date: today, total: c.total, debt: c.debt, net: c.net };
+    } else {
+      history.push({ date: today, total: c.total, debt: c.debt, net: c.net });
+    }
+    const trimmed = history.slice(-MAX_HISTORY);
+    localStorage.setItem(k, JSON.stringify(trimmed));
+    return trimmed;
+  } catch { return loadHistory(scopeKey); }
 }
 
-const Portfolio = memo(function Portfolio({ data, setData, c, view, isCombined }) {
-  const [tabKey, setTabKey] = useState('stocks');
-  const [adding, setAdding] = useState(false);
-  const tab = TABS.find((t) => t.key === tabKey);
-  const upd = (key, id, patch) => setData((d) => ({ ...d, [key]: d[key].map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
-  const del = (key, id) => setData((d) => ({ ...d, [key]: d[key].filter((r) => r.id !== id) }));
-  const addRow = (f) => {
-    const row = { id: uid() };
-    if (tabKey === 'stocks') Object.assign(row, { code: String(f.code).toUpperCase(), qty: num(f.qty), cost: num(f.cost), price: num(f.price), target: num(f.target), dir: 0 });
-    if (tabKey === 'gold') Object.assign(row, { type: String(f.type), qty: num(f.qty), cost: num(f.cost), price: num(f.price), target: num(f.target) });
-    if (tabKey === 'savings') Object.assign(row, { bank: String(f.bank), principal: num(f.principal), rate: num(f.rate), term: num(f.term), start: f.start || toISO(TODAY) });
-    setData((d) => ({ ...d, [tabKey]: [...d[tabKey], row] }));
-    setAdding(false);
-  };
-  const totalOf = { stocks: c.stockTotal, gold: c.goldTotal, savings: c.bankTotal }[tabKey];
-  const rows = data[tabKey];
-  const st = c.pct[tab.cls] - data.targets[tab.cls];
-  const stText = Math.abs(st) <= 2 ? 'Cân đối' : st < 0 ? `Thiếu ${pcv(Math.abs(st))} so mục tiêu` : `Vượt ${pcv(st)} so mục tiêu`;
-  const stCls = Math.abs(st) <= 2 ? 'bg-emerald-50 text-emerald-700' : st < 0 ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700';
-  const TD = 'px-2 py-1';
-  const targetSum = (key) => sum(data[key], (r) => r.target);
-  const tgtCls = (key) => (Math.abs(targetSum(key) - 100) > 0.001 ? 'text-rose-600' : 'text-slate-700');
+function NetWorthChart({ history }) {
+  const [hover, setHover] = useState(null);
+  if (!history || history.length < 2) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-slate-400 text-sm text-center px-4">
+        <Icon name="layers" size={32} />
+        <p className="mt-2 font-semibold">Chưa đủ dữ liệu</p>
+        <p className="text-xs text-slate-400 mt-1">Mở app mỗi ngày — chart tự vẽ từ ngày 2 trở đi.</p>
+      </div>
+    );
+  }
 
-  let heads, body, foot;
-  if (tabKey === 'stocks') {
-    heads = [{ t: 'Mã CP', a: 'l' }, { t: 'KL' }, { t: 'Giá vốn TB' }, { t: 'Giá HT' }, { t: 'Giá trị' }, { t: 'Lãi/Lỗ' }, { t: '% TT' }, { t: '% Target' }, { t: '' }];
-    body = rows.map((r) => {
-      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
-      return (
-        <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
-          <td className={`${TD} w-28`}>
-            <div className="flex items-center gap-1">
-              <input id={`stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${CELL_L} font-bold uppercase`} />
-              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
-            </div>
-          </td>
-          <td className={`${TD} w-24`}><NumInput id={`stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={CELL} /></td>
-          <td className={`${TD} w-28`}><NumInput id={`stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={CELL} /></td>
-          <td className={`${TD} w-32`}>
-            <div className="flex items-center gap-0.5">
-              <span className={r.dir > 0 ? 'text-emerald-600' : r.dir < 0 ? 'text-rose-600' : 'text-transparent'} aria-hidden="true"><Icon name={r.dir < 0 ? 'down' : 'up'} size={10} /></span>
-              <NumInput id={`stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={CELL} />
-            </div>
-          </td>
-          <td className={`${TD} text-right font-bold text-slate-900 whitespace-nowrap`}><Money v={value} /></td>
-          <td className={`${TD} whitespace-nowrap`}><Pnl amount={pnl} p={pp} /></td>
-          <td className={`${TD} text-right tnum text-slate-600`}>{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)}</td>
-          <td className={`${TD} w-20`}><NumInput id={`stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={CELL} /></td>
-          <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} /></td>
-        </tr>
-      );
-    });
-    const tp = sum(rows, (r) => r.qty * (r.price - r.cost)), tc = sum(rows, (r) => r.qty * r.cost);
-    foot = (
-      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-        <td className="px-2 py-2" colSpan={4}>Tổng</td>
-        <td className="px-2 py-2 text-right"><Money v={c.stockTotal} /></td>
-        <td className="px-2 py-2"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
-        <td className="px-2 py-2 text-right tnum">100%</td>
-        <td className={`px-2 py-2 text-right tnum ${tgtCls('stocks')}`}>{pcv(targetSum('stocks'), 0)}</td><td />
-      </tr>
-    );
-  } else if (tabKey === 'gold') {
-    heads = [{ t: 'Loại vàng', a: 'l' }, { t: 'SL (chỉ)' }, { t: 'Giá vốn/chỉ' }, { t: 'Giá HT/chỉ' }, { t: 'Giá trị' }, { t: 'Lãi/Lỗ' }, { t: '% TT' }, { t: '% Target' }, { t: '' }];
-    body = rows.map((r) => {
-      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
-      return (
-        <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
-          <td className={`${TD} w-40`}>
-            <div className="flex items-center gap-1">
-              <input id={`gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${CELL_L} font-bold`} />
-              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
-            </div>
-          </td>
-          <td className={`${TD} w-20`}><NumInput id={`gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={CELL} /></td>
-          <td className={`${TD} w-32`}><NumInput id={`gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={CELL} /></td>
-          <td className={`${TD} w-32`}><NumInput id={`gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={CELL} /></td>
-          <td className={`${TD} text-right font-bold text-slate-900 whitespace-nowrap`}><Money v={value} /></td>
-          <td className={`${TD} whitespace-nowrap`}><Pnl amount={pnl} p={pp} /></td>
-          <td className={`${TD} text-right tnum text-slate-600`}>{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)}</td>
-          <td className={`${TD} w-20`}><NumInput id={`gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={CELL} /></td>
-          <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} /></td>
-        </tr>
-      );
-    });
-    const tp = sum(rows, (r) => r.qty * (r.price - r.cost)), tc = sum(rows, (r) => r.qty * r.cost);
-    foot = (
-      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-        <td className="px-2 py-2">Tổng</td>
-        <td className="px-2 py-2 text-right tnum">{String(sum(rows, (r) => r.qty)).replace('.', ',')}</td><td colSpan={2} />
-        <td className="px-2 py-2 text-right"><Money v={c.goldTotal} /></td>
-        <td className="px-2 py-2"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
-        <td className="px-2 py-2 text-right tnum">100%</td>
-        <td className={`px-2 py-2 text-right tnum ${tgtCls('gold')}`}>{pcv(targetSum('gold'), 0)}</td><td />
-      </tr>
-    );
+  const W = 480, H = 180, PAD = { l: 48, r: 16, t: 12, b: 32 };
+  const iW = W - PAD.l - PAD.r, iH = H - PAD.t - PAD.b;
+
+  const vals = history.map(h => h.net);
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const range = maxV - minV || 1;
+  const toX = (i) => PAD.l + (i / (history.length - 1)) * iW;
+  const toY = (v) => PAD.t + (1 - (v - minV) / range) * iH;
+
+  const yTicks = [-2,-1,0,1,2].map(k => maxV - k * (range/4)).filter(v => v >= minV - range*0.1 && v <= maxV + range*0.1);
+
+  const pts = history.map((h, i) => [toX(i), toY(h.net)]);
+  const linePath = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const areaPath = linePath + ` L${pts[pts.length-1][0]},${PAD.t+iH} L${pts[0][0]},${PAD.t+iH} Z`;
+
+  const xLabels = [];
+  if (history.length <= 7) {
+    history.forEach((h, i) => { const d = parseISO(h.date); xLabels.push({ i, text: `${d.getDate()}/${d.getMonth()+1}` }); });
   } else {
-    heads = [{ t: 'Ngân hàng', a: 'l' }, { t: 'Số tiền gốc' }, { t: 'Lãi suất %/năm' }, { t: 'Kỳ hạn (th)' }, { t: 'Ngày gửi', a: 'l' }, { t: 'Đáo hạn', a: 'l' }, { t: 'Lãi dự kiến' }, { t: '' }];
-    body = rows.map((r) => {
-      const maturity = addMonths(parseISO(r.start), Math.round(r.term));
-      return (
-        <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
-          <td className={`${TD} w-40`}>
-            <div className="flex items-center gap-1">
-              <input id={`sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${CELL_L} font-bold`} />
-              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
-            </div>
-          </td>
-          <td className={`${TD} w-36`}><NumInput id={`sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={CELL} /></td>
-          <td className={`${TD} w-20`}><NumInput id={`sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={CELL} /></td>
-          <td className={`${TD} w-16`}><NumInput id={`sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={CELL} /></td>
-          <td className={TD}><input id={`sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${CELL_L} w-32`} /></td>
-          <td className={`${TD} whitespace-nowrap`}><div className="font-semibold tnum text-slate-800">{fmtDate(maturity)}</div><Countdown days={daysBetween(TODAY, maturity)} /></td>
-          <td className={`${TD} text-right font-bold text-emerald-600 whitespace-nowrap`}>+<Money v={(r.principal * r.rate * r.term) / 1200} /></td>
-          <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} /></td>
-        </tr>
-      );
+    const step = Math.floor(history.length / 4);
+    [0, step, step*2, step*3, history.length-1].forEach(i => {
+      if (i < history.length) {
+        const d = parseISO(history[i].date);
+        xLabels.push({ i, text: `${d.getDate()}/${d.getMonth()+1}` });
+      }
     });
-    foot = (
-      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-        <td className="px-2 py-2">Tổng</td><td className="px-2 py-2 text-right"><Money v={c.bankTotal} /></td><td colSpan={4} />
-        <td className="px-2 py-2 text-right text-emerald-600">+<Money v={sum(rows, (r) => (r.principal * r.rate * r.term) / 1200)} /></td><td />
-      </tr>
-    );
   }
 
-  const phone = view === 'phone';
-  const pAll = sum(rows, (r) => r.qty * (r.price - r.cost)), cAll = sum(rows, (r) => r.qty * r.cost), interestAll = sum(rows, (r) => (r.principal * r.rate * r.term) / 1200);
-  const phoneCards = rows.map((r) => {
-    if (tabKey === 'stocks') {
-      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
-      return (
-        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-2">
-            <input id={`pc-stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${PH_TEXT} uppercase flex-1 min-w-0`} />
-            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
-            <div className="text-right shrink-0">
-              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
-              <p className="text-[10px] text-slate-500 tnum">{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)} nhóm CP</p>
-            </div>
-            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2.5">
-            <PField id={`pc-stk-${r.id}-qty`} label="Khối lượng"><NumInput id={`pc-stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-stk-${r.id}-cost`} label="Giá vốn TB"><NumInput id={`pc-stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-stk-${r.id}-price`} label={<>Giá hiện tại <span className={r.dir > 0 ? 'text-emerald-600' : 'text-rose-600'}>{r.dir > 0 ? '▲' : r.dir < 0 ? '▼' : ''}</span></>}><NumInput id={`pc-stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={PH_NUM} /></PField>
-            <PField id={`pc-stk-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={PH_NUM} /></PField>
-          </div>
-          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
-        </article>
-      );
-    }
-    if (tabKey === 'gold') {
-      const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
-      return (
-        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-2">
-            <input id={`pc-gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
-            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
-            <div className="text-right shrink-0">
-              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
-              <p className="text-[10px] text-slate-500 tnum">{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)} nhóm vàng</p>
-            </div>
-            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2.5">
-            <PField id={`pc-gld-${r.id}-qty`} label="Số lượng (chỉ)"><NumInput id={`pc-gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-gld-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-gld-${r.id}-cost`} label="Giá vốn / chỉ"><NumInput id={`pc-gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-gld-${r.id}-price`} label="Giá hiện tại / chỉ"><NumInput id={`pc-gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={PH_NUM} /></PField>
-          </div>
-          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
-        </article>
-      );
-    }
-    const maturity = addMonths(parseISO(r.start), Math.round(r.term));
-    return (
-      <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="flex items-center gap-2">
-          <input id={`pc-sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
-          {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
-          <div className="text-right shrink-0">
-            <p className="text-sm font-extrabold text-slate-900"><Money v={r.principal} /></p>
-            <p className="text-[10px] text-slate-500 tnum">{pcv(c.bankTotal > 0 ? (r.principal / c.bankTotal) * 100 : 0, 0)} nhóm gửi</p>
-          </div>
-          <IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} />
-        </div>
-        <div className="grid grid-cols-2 gap-2 mt-2.5">
-          <PField id={`pc-sav-${r.id}-pr`} label="Số tiền gốc"><NumInput id={`pc-sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={PH_NUM} /></PField>
-          <PField id={`pc-sav-${r.id}-rate`} label="Lãi suất %/năm"><NumInput id={`pc-sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={PH_NUM} /></PField>
-          <PField id={`pc-sav-${r.id}-term`} label="Kỳ hạn (tháng)"><NumInput id={`pc-sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={PH_NUM} /></PField>
-          <PField id={`pc-sav-${r.id}-start`} label="Ngày gửi"><input id={`pc-sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${PH_TEXT} min-w-0`} /></PField>
-        </div>
-        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-100">
-          <div><p className="text-[10px] font-bold uppercase text-slate-400">Đáo hạn</p><p className="text-xs font-semibold tnum text-slate-800">{fmtDate(maturity)}</p><Countdown days={daysBetween(TODAY, maturity)} /></div>
-          <div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-400">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={(r.principal * r.rate * r.term) / 1200} /></p></div>
-        </div>
-      </article>
-    );
-  });
-  const phoneFoot = (
-    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex items-center justify-between gap-2">
-      <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng {tab.label}</p><p className="text-base font-extrabold tnum text-slate-900"><Money v={totalOf} /></p></div>
-      {tabKey !== 'savings'
-        ? <Pnl amount={pAll} p={cAll > 0 ? (pAll / cAll) * 100 : 0} />
-        : <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={interestAll} /></p></div>}
-    </div>
-  );
+  const hd = hover !== null ? history[hover] : null;
 
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-w-0" style={{ borderTop: `4px solid ${tab.color}` }}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pt-4 pb-2">
-        <div className="min-w-0">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Nhập liệu danh mục đầu tư</h2>
-          <div role="tablist" aria-label="Danh mục đầu tư" className="flex flex-wrap gap-1.5">
-            {TABS.map((t) => <TabButton key={t.key} color={t.color} active={t.key === tabKey} onClick={() => setTabKey(t.key)}>{t.label}</TabButton>)}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setAdding(true)} aria-label={tab.add} title={tab.add} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg text-white hover:opacity-90 active:scale-95 transition" style={{ background: tab.color }}><Icon name="plus" size={14} />{tab.add}</button>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 pb-3 text-xs">
-        <span className="font-bold text-slate-700">{tab.label}:</span>
-        <Money v={totalOf} className="font-extrabold text-slate-900" />
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: tab.color + '22', color: tab.ink }}>{pcv(c.pct[tab.cls])} Tổng TS</span>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${stCls}`}>{stText}</span>
-      </div>
-      {phone ? (
-        <div className="px-3 pb-3 space-y-2.5">
-          {rows.length === 0 && <p className="text-xs text-slate-400 text-center py-8">Chưa có dữ liệu {tab.label.toLowerCase()}. Bấm “{tab.add}” để nhập.</p>}
-          {phoneCards}
-          {rows.length > 0 && phoneFoot}
-        </div>
-      ) : (
-        <div className="max-h-[420px] overflow-y-auto thin-scroll">
-          <TableLayout heads={heads} isEmpty={rows.length === 0} empty={`Chưa có dữ liệu ${tab.label.toLowerCase()}. Bấm “${tab.add}” để nhập.`} foot={foot}>{body}</TableLayout>
+    <div className="relative">
+      {hd && (
+        <div className="absolute top-0 right-0 text-right text-xs leading-relaxed bg-white/90 border border-slate-200 rounded-xl px-3 py-2 shadow-sm z-10 pointer-events-none">
+          <p className="font-bold text-slate-800">{fmtDate(parseISO(hd.date))}</p>
+          <p className="text-indigo-700 font-extrabold tnum">{big(hd.net)}</p>
+          <p className="text-slate-500 tnum">TS: {compact(hd.total)} · Nợ: {compact(hd.debt)}</p>
         </div>
       )}
-      <div className="px-4 sm:px-5 pb-4"><Insight items={portfolioInsights(tabKey, data, c)} title={`Nhận định ${tab.label.toLowerCase()}`} /></div>
-      {adding && <AddModal tab={tab} onSubmit={addRow} onClose={() => setAdding(false)} />}
-    </section>
-  );
-});
-
-const TopAssetsCard = memo(function TopAssetsCard({ data, c }) {
-  const items = [
-    ...data.stocks.map((r) => ({ name: `Cổ phiếu ${r.code || '(chưa đặt mã)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Cổ phiếu', value: r.qty * r.price, color: CLASSES[0].color })),
-    ...data.gold.map((r) => ({ name: `Vàng ${r.type || '(chưa đặt tên)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Vàng', value: r.qty * r.price, color: CLASSES[1].color })),
-    ...data.savings.map((r) => ({ name: `Sổ tiết kiệm ${r.bank || '(chưa đặt tên)'}${r._ownerName ? ` (${r._ownerName})` : ''}`, type: 'Tiền gửi', value: r.principal, color: CLASSES[2].color })),
-    { name: 'Tiền mặt', type: 'Tiền mặt', value: data.cash, color: CLASSES[3].color },
-    { name: 'Nợ phải đòi', type: 'Nợ phải đòi', value: data.receivable, color: CLASSES[4].color },
-    { name: data.estateName || 'Bất động sản', type: 'Bất động sản', value: data.estate, color: CLASSES[5].color },
-  ].filter((a) => a.value > 0).sort((a, b) => b.value - a.value);
-  const shown = items.slice(0, 6), max = shown.length ? shown[0].value : 1;
-  return (
-    <Card title="Top tài sản lớn nhất" right={<span className="text-[11px] font-semibold text-slate-500 tnum">Tổng TS {compact(c.total)}</span>}>
-      <div className="space-y-3.5">
-        {shown.length === 0 && <p className="text-xs text-slate-400 text-center py-6">Chưa có tài sản. Nhập giá trị ở khối cơ cấu danh mục hoặc bảng nhập liệu.</p>}
-        {shown.map((a, i) => (
-          <ProgressRow key={a.name + i} title={a.name} sub={`${a.type} · ${pcv(c.total > 0 ? (a.value / c.total) * 100 : 0)} tổng TS`} valueText={compact(a.value)} valueTitle={vnd(a.value)} pct={(a.value / max) * 100} color={a.color}
-            lead={<span className="h-6 w-6 shrink-0 rounded-full bg-slate-100 text-slate-600 text-[11px] font-extrabold grid place-items-center">{i + 1}</span>} />
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{maxHeight: 180}}
+        onMouseLeave={() => setHover(null)}>
+        <defs>
+          <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#4f46e5" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {yTicks.map((v, i) => (
+          <g key={i}>
+            <line x1={PAD.l} x2={PAD.l + iW} y1={toY(v)} y2={toY(v)} stroke="#e2e8f0" strokeWidth="0.5" />
+            <text x={PAD.l - 4} y={toY(v) + 4} textAnchor="end" fontSize="9" fill="#94a3b8" fontFamily="monospace">{compact(v)}</text>
+          </g>
         ))}
-      </div>
-      <Insight items={topAssetInsights(items, c, data)} />
-    </Card>
-  );
-});
-
-function CategoryRow({ cat, budget, onChange, onDelete, view }) {
-  const [open, setOpen] = useState(false);
-  const ph = view === 'phone', total = catTotal(cat), p = budget > 0 ? (total / budget) * 100 : 0, over = p > 100;
-  const addItem = () => {
-    let items = cat.items, amount = cat.amount;
-    if (items.length === 0 && amount > 0) { items = [{ id: uid(), name: 'Chi chung', amount }]; amount = 0; }
-    onChange({ items: [...items, { id: uid(), name: '', amount: 0 }], amount });
-    setOpen(true);
-  };
-  const updItem = (id, patch) => onChange({ items: cat.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
-  const delItem = (id) => { const items = cat.items.filter((i) => i.id !== id); onChange({ items, amount: items.length ? cat.amount : 0 }); };
-  const amt = cat.items.length > 0
-    ? <Money v={total} className="text-sm font-bold text-slate-900" />
-    : <div className={ph ? 'w-36' : 'w-28'}><NumInput id={`cat-${cat.id}-amt`} ariaLabel={`Tổng nhóm ${cat.name}`} value={cat.amount} onChange={(v) => onChange({ amount: v })} className={`${CELL} text-sm font-bold`} /></div>;
-  const pct = <span className={`w-10 text-right text-[11px] font-bold tnum ${over ? 'text-rose-600' : 'text-slate-500'}`}>{pcv(p, 0)}</span>;
-  return (
-    <div>
-      <div className="flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: cat.color }} aria-hidden="true" />
-        <input id={`cat-${cat.id}-name`} aria-label="Tên nhóm chi tiêu" value={cat.name} placeholder="Tên nhóm" onChange={(e) => onChange({ name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 text-sm font-semibold text-slate-800`} />
-        {!ph && amt}
-        {!ph && pct}
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? 'Thu gọn' : 'Mở chi tiết khoản chi'} className="p-1 rounded-md text-slate-400 hover:bg-slate-100">
-          <span className="block transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}><Icon name="chevron" size={14} /></span>
-        </button>
-        <IconBtn tone="rose" icon="trash" label={`Xóa nhóm ${cat.name}`} onClick={onDelete} />
-      </div>
-      {ph && <div className="ml-4 mt-1 flex items-center justify-between gap-2">{amt}{pct}</div>}
-      <div className="ml-4 mt-1"><Bar pct={p} color={over ? '#e11d48' : cat.color} label={cat.name} /></div>
-      {open && (
-        <div className="ml-4 mt-2 space-y-1">
-          {cat.items.map((it) => (
-            <div key={it.id} className="flex items-center gap-1.5">
-              <input id={`it-${it.id}-name`} aria-label="Tên khoản chi" value={it.name} placeholder="VD: Tiền điện" onChange={(e) => updItem(it.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 bg-slate-50`} />
-              <div className={`${ph ? 'w-32' : 'w-28'} shrink-0`}><NumInput id={`it-${it.id}-amt`} ariaLabel={`Số tiền ${it.name}`} value={it.amount} onChange={(v) => updItem(it.id, { amount: v })} className={`${CELL} bg-slate-50`} /></div>
-              <IconBtn tone="rose" icon="trash" label={`Xóa khoản ${it.name}`} onClick={() => delItem(it.id)} />
-            </div>
-          ))}
-          <button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800"><Icon name="plus" size={12} />Thêm khoản chi (tiền nhà, tiền điện, đổ xăng...)</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const SpendingCard = memo(function SpendingCard({ data, setData, c, view }) {
-  const updCat = (id, patch) => setData((d) => ({ ...d, categories: d.categories.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
-  const delCat = (id) => setData((d) => ({ ...d, categories: d.categories.filter((x) => x.id !== id) }));
-  const addCat = () => setData((d) => ({ ...d, categories: [...d.categories, { id: uid(), name: '', color: CAT_COLORS[d.categories.length % CAT_COLORS.length], amount: 0, items: [] }] }));
-  const left = data.budget - c.spent;
-  return (
-    <Card title="Cơ cấu chi tiêu hàng tháng" right={<IconBtn icon="plus" label="Thêm nhóm chi tiêu" onClick={addCat} />}>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label htmlFor="income" className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Thu nhập / tháng</label>
-          <NumInput id="income" value={data.income} onChange={(v) => setData((d) => ({ ...d, income: v }))} className={`${BOXED} text-emerald-600`} />
-        </div>
-        <div>
-          <label htmlFor="budget" className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Ngân sách chi tiêu</label>
-          <NumInput id="budget" value={data.budget} onChange={(v) => setData((d) => ({ ...d, budget: v }))} className={`${BOXED} text-indigo-700`} />
-        </div>
-      </div>
-      <div className="space-y-3.5">
-        {data.categories.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có nhóm chi tiêu. Bấm + để thêm.</p>}
-        {data.categories.map((cat) => <CategoryRow key={cat.id + (cat._owner || '')} cat={cat} budget={data.budget} view={view} onChange={(patch) => updCat(cat.id, patch)} onDelete={() => delCat(cat.id)} />)}
-        <ProgressRow title={left >= 0 ? 'Ngân sách còn lại' : 'Vượt ngân sách'} valueText={compact(Math.abs(left))} valueTitle={vnd(Math.abs(left))} pctText={pcv(data.budget > 0 ? (Math.abs(left) / data.budget) * 100 : 0, 0)} pct={data.budget > 0 ? (Math.abs(left) / data.budget) * 100 : 0} color={left >= 0 ? '#cbd5e1' : '#e11d48'} />
-      </div>
-      <p className="text-xs text-slate-500 mt-3 tnum">Đã chi <Money v={c.spent} className="font-bold text-rose-600" /> / <Money v={data.budget} className="font-bold text-slate-700" /></p>
-      <Insight items={spendingInsights(data, c)} />
-    </Card>
-  );
-});
-
-function projectGoal(g, surplus) {
-  const rem = Math.max(0, g.target - g.current), daysLeft = daysBetween(TODAY, parseISO(g.deadline));
-  if (g.target > 0 && rem === 0) return { kind: 'done', line: 'Đã đủ số tiền mục tiêu', rem };
-  if (g.target <= 0) return { kind: 'none', line: 'Nhập số tiền mục tiêu để xem dự phóng', rem };
-  if (surplus <= 0) return { kind: 'bad', line: 'Thặng dư ≤ 0, chưa thể tích lũy thêm', rem };
-  const months = Math.ceil(rem / surplus), line = `Nếu dồn 100% thặng dư (${compact(surplus)}/th), cần ${months} tháng`;
-  if (daysLeft < 0) return { kind: 'bad', line, verdict: `Đã quá hạn ${Math.abs(daysLeft)} ngày`, rem };
-  const monthsLeft = daysLeft / 30.4375;
-  if (months <= monthsLeft) return { kind: 'ok', line, verdict: `Kịp hạn, dư ~${Math.max(0, Math.floor(monthsLeft - months))} tháng`, rem };
-  return { kind: 'bad', line, verdict: `Không kịp hạn, trễ ~${Math.round(months - monthsLeft)} tháng. Cần ${compact(rem / Math.max(1, Math.floor(monthsLeft)))}/tháng`, rem };
-}
-
-const GoalsCard = memo(function GoalsCard({ data, setData, c }) {
-  const [editId, setEditId] = useState(null);
-  const upd = (id, patch) => setData((d) => ({ ...d, goals: d.goals.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
-  const del = (id) => setData((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) }));
-  const add = (preset = null) => {
-    const id = uid();
-    const newGoal = preset || { id, name: 'Mục tiêu mới', current: 0, target: 50000000, deadline: toISO(addMonths(TODAY, 12)), source: 'bank', priority: 2 };
-    setData((d) => ({ ...d, goals: [...d.goals, { ...newGoal, id }] }));
-    if (!preset) setEditId(id);
-  };
-
-  const poolAvail = { bank: c.bankTotal, cash: data.cash, gold: c.goldTotal, stock: c.stockTotal };
-  const poolStats = {}, goalAllocStatus = {};
-
-  ['bank', 'cash', 'gold', 'stock'].forEach((srcKey) => {
-    const avail = poolAvail[srcKey] || 0;
-    const goalsInSrc = data.goals
-      .filter((g) => (g.source || 'bank') === srcKey)
-      .slice()
-      .sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
-
-    const totalUsed = sum(goalsInSrc, (g) => g.current), balance = avail - totalUsed;
-    let remPool = avail;
-
-    goalsInSrc.forEach((g) => {
-      const covered = Math.max(0, Math.min(g.current, remPool)), uncovered = Math.max(0, g.current - covered);
-      remPool = Math.max(0, remPool - g.current);
-      goalAllocStatus[g.id] = { covered, uncovered, avail, totalUsed, balance };
-    });
-
-    poolStats[srcKey] = { key: srcKey, label: GOAL_SOURCES.find((s) => s.key === srcKey).label, avail, totalUsed, balance, count: goalsInSrc.length, goalsInSrc };
-  });
-
-  const overdrawnPools = Object.values(poolStats).filter((p) => p.balance < 0);
-  const suggestions = [];
-  const emergencyTarget = c.spent > 0 ? c.spent * 6 : 42000000;
-  const hasEmergencyGoal = data.goals.some((g) => /khẩn cấp|dự phòng/i.test(g.name));
-
-  if (!hasEmergencyGoal) {
-    suggestions.push({
-      id: 'sug-emg', tone: 'amber',
-      text: `Bạn chưa có Quỹ khẩn cấp (chuẩn 6 tháng chi tiêu = ${compact(emergencyTarget)}). Nên ưu tiên số 1 từ Tiền gửi NH để bảo vệ tài sản.`,
-      actionLabel: '+ Tạo Quỹ khẩn cấp',
-      onAction: () => add({ name: 'Quỹ khẩn cấp 6 tháng', current: Math.min(c.bankTotal, emergencyTarget), target: emergencyTarget, deadline: toISO(addMonths(TODAY, 6)), source: 'bank', priority: 1 })
-    });
-  }
-
-  overdrawnPools.forEach((p) => {
-    const lowPrioGoals = p.goalsInSrc.filter((g) => goalAllocStatus[g.id]?.uncovered > 0);
-    const names = lowPrioGoals.map((g) => `“${g.name}” (Ưu tiên ${g.priority || 2})`).join(', ');
-    suggestions.push({
-      id: `sug-over-${p.key}`, tone: 'rose',
-      text: `Nguồn ${p.label} đang chỉ có ${compact(p.avail)} nhưng bạn phân bổ tới ${compact(p.totalUsed)} (Đang âm ${compact(Math.abs(p.balance))}). Khuyến nghị: Giảm số tiền hiện có hoặc lùi độ ưu tiên của ${names || 'mục tiêu phụ'}.`
-    });
-  });
-
-  const activeGoals = data.goals.filter((g) => g.target > g.current).slice().sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
-
-  if (c.surplus > 0 && activeGoals.length > 0) {
-    const topG = activeGoals[0], rem = topG.target - topG.current, mNeed = Math.ceil(rem / c.surplus);
-    suggestions.push({
-      id: 'sug-surplus', tone: 'indigo',
-      text: `Gợi ý ưu tiên thặng dư (+${compact(c.surplus)}/tháng): Nên dồn trước cho “${topG.name}” (Ưu tiên ${topG.priority || 2}, còn thiếu ${compact(rem)}). Chỉ mất khoảng ${mNeed} tháng để hoàn thành dứt điểm.`
-    });
-  } else if (c.surplus <= 0 && activeGoals.length > 0) {
-    suggestions.push({
-      id: 'sug-nosurplus', tone: 'amber',
-      text: `Thặng dư tháng đang ≤ 0 (${compact(c.surplus)}). Bạn cần cắt giảm chi tiêu hoặc tăng thu nhập để có dòng tiền nuôi ${activeGoals.length} mục tiêu đang chạy.`
-    });
-  }
-
-  const freeBank = Math.max(0, poolStats.bank.balance), freeCash = Math.max(0, poolStats.cash.balance);
-  if ((freeBank + freeCash) >= 10000000 && activeGoals.length > 0) {
-    const topG = activeGoals[0];
-    suggestions.push({
-      id: 'sug-idle', tone: 'emerald',
-      text: `Bạn đang còn ${compact(freeBank + freeCash)} vốn thanh khoản chưa gán mục tiêu (${compact(freeBank)} Tiền gửi NH, ${compact(freeCash)} Tiền mặt). Có thể phân bổ thêm vào “${topG.name}” để rút ngắn thời gian.`
-    });
-  }
-
-  return (
-    <Card title="Tiến độ mục tiêu & Phân bổ nguồn tiền" right={<IconBtn icon="plus" label="Thêm mục tiêu" onClick={() => add()} />}>
-      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kiểm tra nguồn vốn cấp cho mục tiêu</span>
-          <span className="text-[10px] font-semibold text-slate-400">Đã gán / Thực có</span>
-        </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          {['bank', 'cash', 'gold', 'stock'].map((k) => {
-            const st = poolStats[k];
-            if (st.avail === 0 && st.totalUsed === 0) return null;
-            const isOver = st.balance < 0;
-            return (
-              <div key={k} className={`rounded-lg border px-2 py-1.5 text-xs ${isOver ? 'bg-rose-50 border-rose-300 text-rose-900' : 'bg-white border-slate-200 text-slate-700'}`}>
-                <div className="flex items-center justify-between font-bold">
-                  <span className="truncate">{st.label}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isOver ? 'bg-rose-600 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
-                    {isOver ? `Âm ${compact(Math.abs(st.balance))}` : `Dư ${compact(st.balance)}`}
-                  </span>
-                </div>
-                <div className="text-[11px] tnum mt-0.5 text-slate-500">
-                  Dùng <b className={isOver ? 'text-rose-700' : 'text-slate-800'}>{compact(st.totalUsed)}</b> / {compact(st.avail)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {overdrawnPools.length > 0 && (
-        <div className="mb-3 rounded-xl border-2 border-rose-500 bg-rose-50 p-3 text-xs text-rose-900" role="alert">
-          <div className="flex items-center gap-1.5 font-extrabold text-rose-700 uppercase tracking-wide text-[11px]">
-            <Icon name="alert" size={15} /> Cảnh báo vượt ngân sách nguồn tiền!
-          </div>
-          {overdrawnPools.map((p) => (
-            <p key={p.key} className="mt-1 leading-relaxed">
-              • Nguồn <b>{p.label}</b> chỉ có thực tế <b>{compact(p.avail)}</b> nhưng tổng các mục tiêu lấy từ nguồn này lên tới <b>{compact(p.totalUsed)}</b> (Đang bị âm <b>{compact(Math.abs(p.balance))}</b>). Hãy chọn mục tiêu quan trọng làm <b>Ưu tiên 1</b> hoặc giảm số tiền phân bổ!
-            </p>
-          ))}
-        </div>
-      )}
-
-      {suggestions.length > 0 && (
-        <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700">
-            <Icon name="sparkles" size={14} /> Gợi ý &amp; Ưu tiên dòng tiền
-          </div>
-          {suggestions.map((s) => (
-            <div key={s.id} className="text-[11px] leading-relaxed text-slate-700 flex flex-wrap items-center justify-between gap-2 bg-white/80 rounded-lg px-2.5 py-1.5 border border-indigo-100/80">
-              <span className="flex-1 min-w-[180px]">{s.text}</span>
-              {s.onAction && (
-                <button type="button" onClick={s.onAction} className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-500">
-                  {s.actionLabel}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {data.goals.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có mục tiêu. Bấm + để thêm.</p>}
-        {data.goals.map((g) => {
-          const p = g.target > 0 ? (g.current / g.target) * 100 : 0, pj = projectGoal(g, c.surplus);
-          const good = pj.kind === 'done' || pj.kind === 'ok', editing = editId === g.id;
-          const srcObj = GOAL_SOURCES.find((s) => s.key === (g.source || 'bank')) || GOAL_SOURCES[0];
-          const prioObj = PRIORITIES.find((pr) => pr.v === (g.priority || 2)) || PRIORITIES[1];
-          const alloc = goalAllocStatus[g.id], isShortfall = alloc && alloc.uncovered > 0;
-
-          return (
-            <article key={g.id + (g._owner || '')} className={`rounded-xl border p-3 transition ${isShortfall ? 'border-rose-400 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'}`}>
-              <div className="flex items-center gap-1.5">
-                {editing
-                  ? <input id={`goal-${g.id}-name`} aria-label="Tên mục tiêu" value={g.name} onChange={(e) => upd(g.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 font-bold bg-white border-slate-200`} />
-                  : <h3 className="flex-1 min-w-0 truncate text-sm font-bold text-slate-800">{g.name}</h3>}
-                <span className={`text-sm font-extrabold tnum ${p >= 100 ? 'text-emerald-600' : 'text-indigo-700'}`}>{pcv(p, 0)}</span>
-                <IconBtn icon={editing ? 'check' : 'edit'} label={editing ? 'Xong' : 'Sửa mục tiêu'} onClick={() => setEditId(editing ? null : g.id)} />
-                <IconBtn tone="rose" icon="trash" label={`Xóa mục tiêu ${g.name}`} onClick={() => del(g.id)} />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <select aria-label="Nguồn vốn" value={g.source || 'bank'} onChange={(e) => upd(g.id, { source: e.target.value })} className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}>
-                  {GOAL_SOURCES.map((s) => <option key={s.key} value={s.key}>Nguồn: {s.label}</option>)}
-                </select>
-                <select aria-label="Mức độ ưu tiên" value={g.priority || 2} onChange={(e) => upd(g.id, { priority: Number(e.target.value) })} className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}>
-                  {PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
-                </select>
-              </div>
-
-              <div className="mt-2"><Bar pct={p} color={isShortfall ? '#e11d48' : p >= 100 ? '#16a34a' : '#4f46e5'} label={g.name} /></div>
-
-              {editing ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2.5">
-                  <div>
-                    <label htmlFor={`goal-${g.id}-cur`} className="text-[10px] font-bold text-slate-500">Phân bổ hiện có</label>
-                    <NumInput id={`goal-${g.id}-cur`} value={g.current} onChange={(v) => upd(g.id, { current: v })} className={`${CELL} bg-white border-slate-200 font-bold`} />
-                  </div>
-                  <div>
-                    <label htmlFor={`goal-${g.id}-tgt`} className="text-[10px] font-bold text-slate-500">Mục tiêu cần</label>
-                    <NumInput id={`goal-${g.id}-tgt`} value={g.target} onChange={(v) => upd(g.id, { target: v })} className={`${CELL} bg-white border-slate-200 font-bold`} />
-                  </div>
-                  <div>
-                    <label htmlFor={`goal-${g.id}-due`} className="text-[10px] font-bold text-slate-500">Hạn hoàn thành</label>
-                    <input id={`goal-${g.id}-due`} type="date" value={g.deadline} onChange={(e) => upd(g.id, { deadline: e.target.value || g.deadline })} className={`${CELL_L} bg-white border-slate-200`} />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-500 mt-2 tnum">
-                  <span>Đang gán: <Money v={g.current} className="font-bold text-slate-800" /> / <Money v={g.target} className="font-bold text-slate-800" /></span>
-                  <span>Hạn {fmtDate(parseISO(g.deadline))}</span>
-                </div>
-              )}
-
-              {isShortfall && (
-                <div className="mt-2 rounded-md bg-rose-600 text-white px-2.5 py-1.5 text-[11px] font-semibold leading-snug">
-                  ⚠️ Thiếu hụt {compact(alloc.uncovered)} từ nguồn {srcObj.label}! (Sau khi cấp cho mục tiêu ưu tiên cao hơn, nguồn này chỉ còn đủ {compact(alloc.covered)} cho mục tiêu này).
-                </div>
-              )}
-
-              <p className={`text-[11px] mt-2 leading-snug rounded-md px-2 py-1.5 ${good ? 'bg-emerald-50 text-emerald-800' : pj.kind === 'bad' ? 'bg-amber-50 text-amber-900' : 'bg-slate-100 text-slate-600'}`} title={`Còn thiếu ${vnd(pj.rem)} · thặng dư ${vnd(c.surplus)}/tháng`}>
-                {pj.line}{pj.verdict && <b className="block">{pj.verdict}</b>}
-              </p>
-            </article>
-          );
-        })}
-      </div>
-    </Card>
-  );
-});
-
-const PTABS = [
-  { k: 'overview', label: 'Tổng quan', icon: 'home' },
-  { k: 'portfolio', label: 'Danh mục', icon: 'pie' },
-  { k: 'cash', label: 'Chi tiêu', icon: 'wallet' },
-  { k: 'goals', label: 'Mục tiêu', icon: 'target' },
-];
-const PTITLES = { overview: 'Tổng quan gia sản', portfolio: 'Danh mục đầu tư', cash: 'Chi tiêu & tài sản', goals: 'Mục tiêu tài chính' };
-
-function App() {
-  const [view, setView] = useState(loadView);
-  const [registry, setRegistry] = useState({ version: 3, users: {} });
-  const [currentUserEmail, setCurrentUserEmail] = useState('');
-  const [workspaceMode, setWorkspaceMode] = useState('user1');
-  const [inspectEmail, setInspectEmail] = useState('');
-  const [authStatus, setAuthStatus] = useState('checking');
-  const [legacyCipher, setLegacyCipher] = useState(null);
-  const [legacyPlain, setLegacyPlain] = useState(null);
-  const [showAdminModal, setShowAdminModal] = useState(false);
-
-  const [sync, setSync] = useState(window.supabaseClient ? 'loading' : 'offline');
-  const [tab, setTab] = useState('overview');
-  const [history, setHistory] = useState(() => loadHistory());
-  const [dark, setDark] = useDarkMode();
-
-  const narrow = useNarrow();
-  const client = window.supabaseClient;
-  const regRef = useRef(registry);
-  regRef.current = registry;
-  const lastSaved = useRef('');
-  const saveTimer = useRef(null);
-  const scrollRef = useRef(null);
-
-  const eff = view === 'auto' ? (narrow ? 'phone' : 'auto') : view;
-  const isPhone = eff === 'phone';
-  const framed = isPhone && !narrow;
-
-  // 1. TẢI DỮ LIỆU ĐÁM MÂY SUPABASE & KIỂM TRA PHIÊN ĐĂNG NHẬP
-  const loadRemote = useCallback(async () => {
-    if (window.location.search.includes('error=') || window.location.hash.includes('error=')) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    let loadedReg = null;
-    if (client) {
-      try {
-        const { data: row, error } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
-        if (error) throw error;
-        if (row && row.json_data) {
-          const jd = row.json_data;
-          if (jd.v3_vault) {
-            const bytes = CryptoJS.AES.decrypt(jd.v3_vault, CLOUD_SECRET);
-            const str = bytes.toString(CryptoJS.enc.Utf8);
-            if (str) loadedReg = JSON.parse(str);
-          } else if (jd.version === 3 && jd.users) {
-            loadedReg = jd;
-          } else if (jd.ciphertext) {
-            setLegacyCipher(jd.ciphertext);
-          } else {
-            setLegacyPlain(normalizeData(jd));
-          }
-        }
-        setSync('ready');
-      } catch (e) {
-        console.error('Lỗi tải dữ liệu Supabase:', e);
-        setSync('error');
-      }
-    }
-
-    if (!loadedReg) {
-      try {
-        const localRaw = JSON.parse(localStorage.getItem(KEY) || 'null');
-        if (localRaw && localRaw.v3_vault) {
-          const bytes = CryptoJS.AES.decrypt(localRaw.v3_vault, CLOUD_SECRET);
-          loadedReg = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-        }
-      } catch (err) {}
-    }
-
-    let oauthUser = null;
-    if (client) {
-      try {
-        const { data: sessionData } = await client.auth.getSession();
-        oauthUser = sessionData?.session?.user || null;
-      } catch (err) {}
-    }
-
-    if (oauthUser && oauthUser.email) {
-      const gEmail = cleanEmail(oauthUser.email);
-      const gName = oauthUser.user_metadata?.full_name || gEmail.split('@')[0];
-      const baseUsers = (loadedReg && loadedReg.users) ? loadedReg.users : {};
-      const hasAnyUser = Object.keys(baseUsers).length > 0;
-
-      const nextReg = {
-        version: 3,
-        users: {
-          ...baseUsers,
-          [gEmail]: baseUsers[gEmail] || {
-            email: gEmail, name: gName, pinHash: hashPin('123456'),
-            isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY),
-            data: !hasAnyUser && legacyPlain ? legacyPlain : makeDefaultData(),
-          }
-        }
-      };
-      lastSaved.current = JSON.stringify(nextReg);
-      setRegistry(nextReg);
-      setCurrentUserEmail(gEmail);
-      sessionStorage.setItem(SESSION_KEY, gEmail);
-      setAuthStatus('authenticated');
-      return;
-    }
-
-    if (loadedReg && loadedReg.users) {
-      lastSaved.current = JSON.stringify(loadedReg);
-      setRegistry(loadedReg);
-      const savedSession = cleanEmail(sessionStorage.getItem(SESSION_KEY) || '');
-      if (savedSession && loadedReg.users[savedSession]) {
-        setCurrentUserEmail(savedSession);
-        setAuthStatus('authenticated');
-      } else {
-        setAuthStatus('login');
-      }
-    } else {
-      setAuthStatus('login');
-    }
-  }, [client, legacyPlain]);
-
-  useEffect(() => {
-    loadRemote();
-    if (!client) return undefined;
-    const { data: authListener } = client.auth.onAuthStateChange((event, session) => {
-      if (session && session.user && session.user.email) {
-        const gEmail = cleanEmail(session.user.email);
-        const gName = session.user.user_metadata?.full_name || gEmail.split('@')[0];
-        setRegistry((prev) => {
-          const hasAnyUser = Object.keys(prev.users || {}).length > 0;
-          if (prev.users && prev.users[gEmail]) return prev;
-          return {
-            version: 3,
-            users: {
-              ...(prev.users || {}),
-              [gEmail]: {
-                email: gEmail, name: gName, pinHash: hashPin('123456'),
-                isAdmin: !hasAnyUser, partnerEmail: '', createdAt: toISO(TODAY), data: makeDefaultData(),
-              }
-            }
-          };
-        });
-        setCurrentUserEmail(gEmail);
-        sessionStorage.setItem(SESSION_KEY, gEmail);
-        setAuthStatus('authenticated');
-      }
-    });
-    return () => { if (authListener && authListener.subscription) authListener.subscription.unsubscribe(); };
-  }, [loadRemote, client]);
-
-  // 2. XÁC THỰC ĐĂNG NHẬP / ĐĂNG KÝ GMAIL
-  const handleGmailAuth = ({ mode, email, name, pin, oldPin }) => {
-    const users = registry.users || {}, hasUsers = Object.keys(users).length > 0;
-    if (mode === 'login') {
-      const u = users[email];
-      if (!u) return { ok: false, msg: 'Gmail này chưa được đăng ký. Vui lòng chuyển sang tab "Đăng ký Gmail mới".' };
-      if (u.pinHash !== hashPin(pin)) return { ok: false, msg: 'Mã PIN / Mật khẩu không chính xác!' };
-      setCurrentUserEmail(email);
-      sessionStorage.setItem(SESSION_KEY, email);
-      setWorkspaceMode('user1');
-      setAuthStatus('authenticated');
-      return { ok: true };
-    } else {
-      if (users[email]) return { ok: false, msg: 'Gmail này đã tồn tại trên hệ thống. Vui lòng chọn Đăng nhập.' };
-      let initialData = hasUsers ? makeEmptyUserData() : makeDefaultData();
-      if (!hasUsers) {
-        if (legacyPlain) initialData = legacyPlain;
-        else if (legacyCipher && oldPin) {
-          try {
-            const bytes = CryptoJS.AES.decrypt(legacyCipher, oldPin);
-            const str = bytes.toString(CryptoJS.enc.Utf8);
-            if (str) initialData = normalizeData(JSON.parse(str));
-          } catch (e) {}
-        } else {
-          try {
-            const localLegacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
-            if (localLegacy && !localLegacy.ciphertext) initialData = normalizeData(localLegacy);
-          } catch (e) {}
-        }
-      }
-      const newUser = { email, name, pinHash: hashPin(pin), isAdmin: !hasUsers, partnerEmail: '', createdAt: toISO(TODAY), data: initialData };
-      setRegistry({ version: 3, users: { ...users, [email]: newUser } });
-      setCurrentUserEmail(email);
-      sessionStorage.setItem(SESSION_KEY, email);
-      setWorkspaceMode('user1');
-      setAuthStatus('authenticated');
-      return { ok: true };
-    }
-  };
-
-  const handleGoogleOAuth = async () => {
-    if (!client) return;
-    try {
-      const { error } = await client.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin + window.location.pathname }
-      });
-      if (error) alert('Không thể gọi Google OAuth: ' + error.message);
-    } catch (e) {
-      alert('Vui lòng nhập trực tiếp địa chỉ Gmail và mã PIN ở khung bên trên để đăng nhập.');
-    }
-  };
-
-  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ
-  const meUser = registry.users?.[currentUserEmail] || null;
-  const partnerEmail = meUser?.partnerEmail ? cleanEmail(meUser.partnerEmail) : '';
-  const partnerUser = partnerEmail && registry.users?.[partnerEmail] ? registry.users[partnerEmail] : null;
-
-  const activeData = useMemo(() => {
-    if (!meUser) return makeDefaultData();
-    if (workspaceMode === 'user2' && partnerUser) return normalizeData(partnerUser.data);
-    if (workspaceMode === 'combined' && partnerUser) {
-      return mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email);
-    }
-    if (workspaceMode === 'admin_inspect' && inspectEmail && registry.users?.[inspectEmail]) {
-      return normalizeData(registry.users[inspectEmail].data);
-    }
-    return normalizeData(meUser.data);
-  }, [meUser, partnerUser, workspaceMode, inspectEmail, registry.users]);
-
-  // Luôn gọi Hooks useMemo trước mọi câu lệnh điều kiện rẽ nhánh (Chống React Error #310)
-  const c = useMemo(() => compute(activeData), [activeData]);
-  const combinedNet = useMemo(() => {
-    if (!partnerUser || !meUser) return c.net;
-    return compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net;
-  }, [meUser, partnerUser, c.net]);
-
-  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH
-  const setData = useCallback((updater) => {
-    setRegistry((prev) => {
-      const curMe = prev.users?.[currentUserEmail];
-      if (!curMe) return prev;
-      const pMail = curMe.partnerEmail ? cleanEmail(curMe.partnerEmail) : '';
-      const curPartner = pMail ? prev.users?.[pMail] : null;
-
-      if (workspaceMode === 'user1' || (!curPartner && workspaceMode !== 'admin_inspect')) {
-        const updated = updater(normalizeData(curMe.data));
-        return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: updated } } };
-      }
-      if (workspaceMode === 'user2' && curPartner) {
-        const updated = updater(normalizeData(curPartner.data));
-        return { ...prev, users: { ...prev.users, [pMail]: { ...curPartner, data: updated } } };
-      }
-      if (workspaceMode === 'admin_inspect' && inspectEmail && prev.users?.[inspectEmail]) {
-        const targetU = prev.users[inspectEmail];
-        const updated = updater(normalizeData(targetU.data));
-        return { ...prev, users: { ...prev.users, [inspectEmail]: { ...targetU, data: updated } } };
-      }
-      if (workspaceMode === 'combined' && curPartner) {
-        const d1 = normalizeData(curMe.data), d2 = normalizeData(curPartner.data);
-        const mergedBefore = mergeCoupleData(d1, d2, curMe.name, curPartner.name, curMe.email, curPartner.email);
-        const mergedAfter = updater(mergedBefore);
-
-        const splitList = (list) => {
-          const u1List = [], u2List = [];
-          (list || []).forEach((item) => {
-            const cleanItem = { ...item };
-            if (item._owner === pMail) {
-              cleanItem.name = String(cleanItem.name || '').replace(` (${curPartner.name})`, '').replace(` [${curPartner.name}]`, '');
-              u2List.push(cleanItem);
-            } else {
-              cleanItem.name = String(cleanItem.name || '').replace(` (${curMe.name})`, '').replace(` [${curMe.name}]`, '');
-              u1List.push({ ...cleanItem, _owner: curMe.email });
-            }
-          });
-          return [u1List, u2List];
-        };
-
-        const [stocks1, stocks2] = splitList(mergedAfter.stocks);
-        const [gold1, gold2] = splitList(mergedAfter.gold);
-        const [sav1, sav2] = splitList(mergedAfter.savings);
-        const [cat1, cat2] = splitList(mergedAfter.categories);
-        const [goals1, goals2] = splitList(mergedAfter.goals);
-
-        const nextD1 = {
-          ...d1,
-          cash: d1.cash + (mergedAfter.cash - mergedBefore.cash),
-          receivable: d1.receivable + (mergedAfter.receivable - mergedBefore.receivable),
-          estate: d1.estate + (mergedAfter.estate - mergedBefore.estate),
-          income: d1.income + (mergedAfter.income - mergedBefore.income),
-          budget: d1.budget + (mergedAfter.budget - mergedBefore.budget),
-          fireTarget: d1.fireTarget + (mergedAfter.fireTarget - mergedBefore.fireTarget),
-          debts: {
-            risk: Math.max(0, d1.debts.risk + (mergedAfter.debts.risk - mergedBefore.debts.risk)),
-            safe: Math.max(0, d1.debts.safe + (mergedAfter.debts.safe - mergedBefore.debts.safe)),
-            fixed: Math.max(0, d1.debts.fixed + (mergedAfter.debts.fixed - mergedBefore.debts.fixed)),
-          },
-          targets: mergedAfter.targets, recMode: mergedAfter.recMode,
-          stocks: stocks1, gold: gold1, savings: sav1, categories: cat1, goals: goals1,
-        };
-        const nextD2 = { ...d2, stocks: stocks2, gold: gold2, savings: sav2, categories: cat2, goals: goals2 };
-        return { ...prev, users: { ...prev.users, [currentUserEmail]: { ...curMe, data: nextD1 }, [pMail]: { ...curPartner, data: nextD2 } } };
-      }
-      return prev;
-    });
-  }, [currentUserEmail, workspaceMode, inspectEmail]);
-
-  // 5. GHI LỊCH SỬ TÀI SẢN RÒNG & ĐỒNG BỘ MÃ HÓA ĐA LUỒNG (WEB WORKER)
-  const historyScope = `${currentUserEmail || 'default'}-${workspaceMode}`;
-  useEffect(() => {
-    if (authStatus !== 'authenticated') return;
-    setHistory(saveSnapshot(c, historyScope));
-  }, [authStatus, historyScope, c.total, c.debt, c.net]);
-
-  const flush = useCallback(async () => {
-    if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
-    if (!client) return;
-
-    const myEmail = currentUserEmail, myUserObj = regRef.current.users[myEmail];
-    if (!myUserObj) return;
-
-    setSync('saving');
-    try {
-      const { data: row, error: fetchErr } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
-      if (fetchErr) throw fetchErr;
-
-      let latestReg = regRef.current;
-      if (row && row.json_data && row.json_data.v3_vault) {
-        const bytes = CryptoJS.AES.decrypt(row.json_data.v3_vault, CLOUD_SECRET);
-        const str = bytes.toString(CryptoJS.enc.Utf8);
-        if (str) {
-          const cloudReg = JSON.parse(str);
-          const nextUsers = { ...cloudReg.users, [myEmail]: myUserObj };
-          if (workspaceMode === 'user2' || workspaceMode === 'combined') {
-            const pMail = myUserObj.partnerEmail ? cleanEmail(myUserObj.partnerEmail) : '';
-            if (pMail && regRef.current.users[pMail]) nextUsers[pMail] = regRef.current.users[pMail];
-          }
-          if (workspaceMode === 'admin_inspect' && inspectEmail && regRef.current.users[inspectEmail]) {
-            nextUsers[inspectEmail] = regRef.current.users[inspectEmail];
-          }
-          latestReg = { ...cloudReg, users: nextUsers };
-        }
-      }
-
-      const strToSave = JSON.stringify(latestReg);
-      if (strToSave === lastSaved.current) { setSync('ready'); return; }
-
-      const v3_vault = await window.encryptVaultAsync(strToSave, CLOUD_SECRET);
-      const { error: upsertErr } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
-      if (upsertErr) throw upsertErr;
-
-      lastSaved.current = strToSave;
-      try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
-
-      setRegistry(latestReg);
-      setSync('ready');
-    } catch (err) {
-      console.error('Lỗi lưu Supabase:', err);
-      setSync('error');
-    }
-  }, [authStatus, client, currentUserEmail, workspaceMode, inspectEmail]);
-
-  useEffect(() => {
-    if (authStatus !== 'authenticated' || !Object.keys(registry.users || {}).length) return undefined;
-    const str = JSON.stringify(registry);
-    if (str === lastSaved.current) return undefined;
-
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      if (client) {
-        await flush();
-      } else {
-        const v3_vault = await window.encryptVaultAsync(str, CLOUD_SECRET);
-        try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
-      }
-    }, 1500);
-    return () => clearTimeout(saveTimer.current);
-  }, [registry, authStatus, client, flush]);
-
-  const retry = () => { if (authStatus === 'authenticated') flush(); else loadRemote(); };
-
-  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) {} }, [view]);
-  
-  useEffect(() => {
-    if (!isPhone || authStatus !== 'authenticated') return undefined;
-    document.documentElement.classList.add('lock');
-    document.body.classList.add('lock');
-    return () => { document.documentElement.classList.remove('lock'); document.body.classList.remove('lock'); };
-  }, [isPhone, authStatus]);
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab, isPhone]);
-
-  const handleLogout = async () => {
-    sessionStorage.removeItem(SESSION_KEY);
-    if (client) { try { await client.auth.signOut(); } catch (e) {} }
-    setCurrentUserEmail('');
-    setAuthStatus('login');
-  };
-
-  if (authStatus === 'checking') {
-    return <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-500 font-bold">Đang đồng bộ hệ thống đám mây...</div>;
-  }
-
-  if (authStatus === 'login' || !meUser) {
-    return (
-      <GmailAuthScreen
-        hasUsers={Object.keys(registry.users || {}).length > 0}
-        legacyCipher={legacyCipher}
-        onAuthSuccess={handleGmailAuth}
-        onGoogleOAuth={handleGoogleOAuth}
-      />
-    );
-  }
-
-  const allUsersList = Object.values(registry.users || {});
-
-  const coworkToolbar = (
-    <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:px-3.5 flex flex-col gap-2 shadow-sm no-print">
-      <div className="flex items-center gap-1.5 overflow-x-auto thin-scroll pb-1">
-        <button type="button" onClick={() => setWorkspaceMode('user1')}
-          className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user1' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-          👤 User 1: {meUser.name}
-        </button>
-
-        {partnerUser ? (
-          <>
-            <button type="button" onClick={() => setWorkspaceMode('user2')}
-              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl transition ${workspaceMode === 'user2' ? 'bg-pink-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-              👩 User 2: {partnerUser.name}
-            </button>
-            <button type="button" onClick={() => setWorkspaceMode('combined')}
-              className={`shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-extrabold px-3 py-1.5 rounded-xl transition ${workspaceMode === 'combined' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'}`}>
-              💑 Tổng 2 VC ({compact(combinedNet)})
-            </button>
-          </>
-        ) : (
-          <button type="button" onClick={() => setShowAdminModal(true)}
-            className="shrink-0 inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">
-            + Liên kết Vợ (User 2)
-          </button>
-        )}
-
-        {meUser.isAdmin && allUsersList.length > 1 && (
-          <select aria-label="Admin xem hồ sơ thành viên" value={workspaceMode === 'admin_inspect' ? inspectEmail : ''}
-            onChange={(e) => {
-              if (e.target.value) { setInspectEmail(e.target.value); setWorkspaceMode('admin_inspect'); }
-              else setWorkspaceMode('user1');
-            }}
-            className="shrink-0 text-[11px] sm:text-xs font-bold px-2 py-1.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 outline-none cursor-pointer">
-            <option value="">👑 Admin ({allUsersList.length})</option>
-            {allUsersList.map((u) => <option key={u.email} value={u.email}>👁️ Xem: {u.name} ({u.email})</option>)}
-          </select>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
-        <button type="button" onClick={() => setShowAdminModal(true)}
-          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200">
-          {meUser.isAdmin ? '👑 Quản trị & Co-work' : '⚙️ Co-work & PIN'}
-        </button>
-        <button type="button" onClick={handleLogout} title="Đăng xuất Gmail"
-          className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100">
-          <Icon name="logout" size={13} /> Thoát
-        </button>
-      </div>
-    </div>
-  );
-
-  const outer = V(eff, 'w-full', 'w-full overflow-x-auto thin-scroll', 'w-full overflow-x-hidden');
-  const frame = V(eff, '', 'min-w-[1200px] p-4', 'max-w-[1600px] mx-auto p-3 sm:p-4 overflow-x-hidden');
-  const root = `grid gap-4 ${V(eff, 'grid-cols-1', 'grid-cols-12', 'grid-cols-1 lg:grid-cols-12')}`;
-  const tier = V(eff, '', 'col-span-12', 'lg:col-span-12');
-  const kpiGrid = V(eff, 'grid-cols-2', 'grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]', 'grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]');
-  const netSpan = V(eff, 'col-span-2', '', 'col-span-2 lg:col-span-1');
-  const midGrid = V(eff, 'grid-cols-1', 'grid-cols-[35fr_65fr]', 'grid-cols-1 lg:grid-cols-[35fr_65fr]');
-  const botGrid = V(eff, 'grid-cols-1', 'grid-cols-3', 'grid-cols-1 lg:grid-cols-3');
-  const head = V(eff, 'flex-col', 'flex-row items-end', 'flex-col lg:flex-row lg:items-end');
-
-  const kpiBlock = (
-    <div className={`${tier} grid gap-3 ${kpiGrid}`}>
-      <Kpi small={isPhone} dark className={netSpan} label="Tổng tài sản ròng" sub={vnd(c.net)}><span title={vnd(c.net)}>{big(c.net)}</span></Kpi>
-      <Kpi small={isPhone} label="Tổng tài sản" sub={vnd(c.total)}><span title={vnd(c.total)}>{big(c.total)}</span></Kpi>
-      <Kpi small={isPhone} label="Tổng nợ" sub={`Chiếm ${pcv(c.total > 0 ? (c.debt / c.total) * 100 : 0)} tổng tài sản`} bar={c.total > 0 ? (c.debt / c.total) * 100 : 0} barColor="#f97316"><span className="text-orange-600" title={vnd(c.debt)}>{big(c.debt)}</span></Kpi>
-      <Kpi small={isPhone} className={isPhone ? 'col-span-2' : ''} label="Dòng tiền thặng dư (tháng)" sub={`Thu ${compact(activeData.income)} − chi ${compact(c.spent)} · tiết kiệm ${pcv(activeData.income > 0 ? (c.surplus / activeData.income) * 100 : 0)}`}>
-        <span className={c.surplus >= 0 ? 'text-emerald-600' : 'text-rose-600'} title={vnd(c.surplus)}>{c.surplus >= 0 ? '+ ' : '− '}{fixed2(Math.abs(c.surplus) / 1e6)} triệu</span>
-      </Kpi>
-      <Kpi small={isPhone} className={isPhone ? 'col-span-2' : ''} label="Mức độ tự do tài chính (FIRE)" sub={activeData.fireTarget > 0 ? `Mục tiêu FIRE ${compact(c.fireTarget)}` : `Tự động: 25 × chi tiêu năm = ${compact(c.fireTarget)}`} bar={c.firePct} barColor="#4f46e5"
-        extra={
-          <div className="flex items-center gap-1.5 mt-2">
-            <label htmlFor="fire-target" className="text-[10px] font-bold text-slate-500 shrink-0">Mục tiêu FIRE</label>
-            <NumInput id="fire-target" blankZero value={activeData.fireTarget} placeholder="Tự động" onChange={(v) => setData((d) => ({ ...d, fireTarget: v }))} className="w-full min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white" />
-          </div>
-        }>
-        <span className="text-indigo-700">{pcv(c.firePct, c.firePct < 10 ? 1 : 0)} <span className="text-sm font-bold text-slate-500">mục tiêu</span></span>
-      </Kpi>
-    </div>
-  );
-
-  const allocation = <AllocationCard data={activeData} setData={setData} c={c} view={eff} />;
-  const portfolio = <Portfolio data={activeData} setData={setData} c={c} view={eff} isCombined={workspaceMode === 'combined'} />;
-  const topAssets = <TopAssetsCard data={activeData} c={c} />;
-  const spending = <SpendingCard data={activeData} setData={setData} c={c} view={eff} />;
-  const goals = <GoalsCard data={activeData} setData={setData} c={c} />;
-
-  const activeTitle = workspaceMode === 'combined' && partnerUser
-    ? `TỔNG GIA SẢN 2 VỢ CHỒNG (${meUser.name.toUpperCase()} & ${partnerUser.name.toUpperCase()})`
-    : workspaceMode === 'user2' && partnerUser
-    ? `BÁO CÁO GIA SẢN · ${partnerUser.name.toUpperCase()}`
-    : workspaceMode === 'admin_inspect' && inspectEmail
-    ? `HỒ SƠ THÀNH VIÊN · ${registry.users[inspectEmail]?.name.toUpperCase()}`
-    : `BÁO CÁO TỔNG QUAN GIA SẢN · ${meUser.name.toUpperCase()}`;
-
-  if (isPhone) {
-    const shell = (
-      <div className="flex flex-col h-full w-full bg-slate-50 overflow-hidden">
-        {framed && <StatusBar />}
-        <header className="shrink-0 bg-white border-b border-slate-200 px-4 pb-2.5 flex items-center justify-between gap-2" style={{ paddingTop: framed ? 4 : 'max(10px, env(safe-area-inset-top, 0px))' }}>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold tracking-widest text-indigo-600">
-              WEALTHOS PRO · {meUser.isAdmin ? 'ADMIN' : 'GIA SẢN'}
-            </p>
-            <h1 className="text-[15px] leading-tight font-extrabold text-slate-900 truncate">{PTITLES[tab]}</h1>
-            <SyncBadge sync={sync} onRetry={retry} />
-          </div>
-          <div className="flex items-center gap-1 no-print">
-            <button type="button" onClick={() => setDark(d => !d)} title={dark ? 'Sáng' : 'Tối'}
-              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition" aria-label="Đổi giao diện">
-              <Icon name={dark ? 'sparkles' : 'moon'} size={16} />
-            </button>
-            <button type="button" onClick={() => window.print()} title="In / PDF"
-              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition" aria-label="In báo cáo">
-              <Icon name="print" size={16} />
-            </button>
-            <ViewSwitcher view={view} setView={setView} compact />
-          </div>
-        </header>
-        <main ref={scrollRef} className="app-scroll flex-1 min-h-0 px-3 py-3 space-y-3">
-          {coworkToolbar}
-          {tab === 'overview' && <div className="space-y-3">{kpiBlock}<NetWorthCard history={history} />{allocation}</div>}
-          {tab === 'portfolio' && <div className="space-y-3">{portfolio}</div>}
-          {tab === 'cash' && <div className="space-y-3">{spending}{topAssets}</div>}
-          {tab === 'goals' && <div className="space-y-3">{goals}</div>}
-          <div className="h-2" />
-        </main>
-        <nav aria-label="Điều hướng" className="shrink-0 grid grid-cols-4 bg-white border-t border-slate-200" style={{ paddingBottom: framed ? 10 : 'max(6px, env(safe-area-inset-bottom, 0px))' }}>
-          {PTABS.map((t) => (
-            <button key={t.k} type="button" onClick={() => setTab(t.k)} aria-current={tab === t.k ? 'page' : undefined}
-              className={`flex flex-col items-center gap-0.5 pt-2 pb-1 text-[10px] font-bold ${tab === t.k ? 'text-indigo-600' : 'text-slate-400'}`}>
-              <Icon name={t.icon} size={20} />{t.label}
-            </button>
-          ))}
-        </nav>
-        {showAdminModal && (
-          <AdminCoworkModal
-            registry={registry}
-            currentUserEmail={currentUserEmail}
-            onClose={() => setShowAdminModal(false)}
-            onSaveRegistry={(nextReg) => setRegistry(nextReg)}
-            onSelectInspectUser={(uMail) => { setInspectEmail(uMail); setWorkspaceMode('admin_inspect'); }}
-          />
-        )}
-      </div>
-    );
-    if (!framed) return <div className="fixed inset-0 w-full">{shell}</div>;
-    return (
-      <div className="min-h-screen w-full grid place-items-center bg-slate-200 p-4 overflow-hidden">
-        <div className="relative rounded-[56px] bg-slate-900 p-[10px] shadow-2xl" style={{ width: 410 }}>
-          <div className="relative overflow-hidden rounded-[46px] bg-white" style={{ height: 'min(830px, calc(100dvh - 56px))', transform: 'translateZ(0)' }}>
-            <div className="absolute left-1/2 top-2 z-40 h-[26px] w-[92px] -translate-x-1/2 rounded-full bg-black" aria-hidden="true" />
-            {shell}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 p-2 sm:p-4 overflow-x-hidden">
-      <div className={outer}>
-        <div className={frame}>
-          <div className={root}>
-            <div className={tier}>{coworkToolbar}</div>
-
-            <header className={`${tier} flex ${head} justify-between gap-3`}>
-              <div className="min-w-0">
-                <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-indigo-600">
-                  <Icon name="layers" size={14} />WEALTHOS PRO · {meUser.isAdmin ? 'ADMIN TỐI THƯỢNG' : 'QUẢN LÝ GIA SẢN & TỰ DO TÀI CHÍNH'}
-                </p>
-                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-1">{activeTitle}</h1>
-                <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <SyncBadge sync={sync} onRetry={retry} />
-                  <span>Gmail: <b>{currentUserEmail}</b> · VNĐ · <LiveClock /></span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 no-print">
-                <DarkToggle dark={dark} setDark={setDark} />
-                <button type="button" onClick={() => window.print()}
-                  title="Xuất PDF / In báo cáo"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-100 transition">
-                  <Icon name="print" size={14} />PDF
-                </button>
-                <ViewSwitcher view={view} setView={setView} />
-              </div>
-            </header>
-
-            {kpiBlock}
-
-            <div className={`${tier} grid gap-4 items-start ${midGrid}`}>
-              {allocation}
-              <div className="space-y-4">
-                 <NetWorthCard history={history} />
-              </div>
-            </div>
-
-            <div className={tier}>{portfolio}</div>
-
-            <div className={`${tier} grid gap-4 items-start ${botGrid}`}>
-              {topAssets}
-              {spending}
-              {goals}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showAdminModal && (
-        <AdminCoworkModal
-          registry={registry}
-          currentUserEmail={currentUserEmail}
-          onClose={() => setShowAdminModal(false)}
-          onSaveRegistry={(nextReg) => setRegistry(nextReg)}
-          onSelectInspectUser={(uMail) => { setInspectEmail(uMail); setWorkspaceMode('admin_inspect'); }}
-        />
-      )}
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-
-</body>
-</html>
+        <path d={areaPath} fill="url(#nwGrad)" />
+        <path d={linePath} fill="none" stroke="#4f46e5" strokeWidth="1.8" strokeLinejoin="round
