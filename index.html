@@ -196,16 +196,16 @@ const GROUPS = [
   { key: 'fixed', label: 'Tài sản cố định', sub: 'Bất động sản / Nợ phải đòi', debtLabel: 'Vay thế chấp', debtColor: '#dc2626', debtInk: '#b91c1c' },
 ];
 const GOAL_SOURCES = [
-  { key: 'bank', label: 'Tiền gửi NH', color: '#0d9488', bg: 'bg-teal-50 text-teal-800 border-teal-200' },
-  { key: 'cash', label: 'Tiền mặt', color: '#16a34a', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-  { key: 'gold', label: 'Vàng tích trữ', color: '#d97706', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
-  { key: 'stock', label: 'Cổ phiếu', color: '#2563eb', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
-  { key: 'none', label: 'Nguồn ngoài / Tự tích lũy', color: '#64748b', bg: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { key: 'bank', label: 'Tiền gửi NH', short: 'Tiền gửi NH', color: '#0d9488', bg: 'bg-teal-50 text-teal-800 border-teal-200' },
+  { key: 'cash', label: 'Tiền mặt', short: 'Tiền mặt', color: '#16a34a', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  { key: 'gold', label: 'Vàng tích trữ', short: 'Vàng', color: '#d97706', bg: 'bg-amber-50 text-amber-800 border-amber-200' },
+  { key: 'stock', label: 'Cổ phiếu', short: 'Cổ phiếu', color: '#2563eb', bg: 'bg-blue-50 text-blue-800 border-blue-200' },
+  { key: 'none', label: 'Nguồn ngoài / Tự tích lũy', short: 'Tự tích lũy', color: '#64748b', bg: 'bg-slate-100 text-slate-700 border-slate-200' },
 ];
 const PRIORITIES = [
-  { v: 1, label: 'Ưu tiên 1 (Cao)', badge: 'bg-rose-100 text-rose-800 border-rose-200' },
-  { v: 2, label: 'Ưu tiên 2 (Vừa)', badge: 'bg-amber-100 text-amber-800 border-amber-200' },
-  { v: 3, label: 'Ưu tiên 3 (Thấp)', badge: 'bg-slate-100 text-slate-600 border-slate-200' },
+  { v: 1, label: 'P1 · Cao', badge: 'bg-rose-100 text-rose-800 border-rose-200' },
+  { v: 2, label: 'P2 · Vừa', badge: 'bg-amber-100 text-amber-800 border-amber-200' },
+  { v: 3, label: 'P3 · Thấp', badge: 'bg-slate-100 text-slate-600 border-slate-200' },
 ];
 const CAT_COLORS = ['#2563eb', '#0d9488', '#d97706', '#db2777', '#7c3aed', '#0891b2', '#65a30d', '#dc2626'];
 
@@ -371,13 +371,6 @@ function compute(d) {
     firePct: fireTarget > 0 ? Math.max(0, (net / fireTarget) * 100) : 0,
     targetSum: sum(CLASSES, (c) => d.targets[c.key])
   };
-}
-
-function simulatePrice(r) {
-  if (!(r.price > 0)) return r;
-  const move = (0.01 + Math.random() * 0.02) * (Math.random() < 0.5 ? -1 : 1);
-  const next = Math.max(10, Math.round((r.price * (1 + move)) / 10) * 10);
-  return { ...r, price: next, dir: next >= r.price ? 1 : -1 };
 }
 
 /* ══════════════════════════════════════════════════
@@ -562,14 +555,6 @@ function DarkToggle({ dark, setDark }) {
   );
 }
 
-function niceAxis(max) {
-  const m = max > 0 ? max : 1e6;
-  const base = Math.pow(10, Math.floor(Math.log10(m / 4)));
-  const step = [1, 2, 2.5, 5, 10].map((k) => k * base).find((s) => s * 4 >= m) || 10 * base;
-  const n = Math.max(1, Math.ceil(m / step));
-  return { max: n * step, ticks: Array.from({ length: n + 1 }, (_, i) => i * step) };
-}
-
 const ICONS = {
   monitor: 'M3 4h18v12H3zM8 20h8M12 16v4',
   phone: 'M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2',
@@ -636,8 +621,8 @@ function NumInput({ value, onChange, decimal = false, className = '', placeholde
   return <input id={id} aria-label={ariaLabel} type="text" inputMode={decimal ? 'decimal' : 'numeric'} value={txt} onChange={handle} placeholder={placeholder} className={className} autoComplete="off" />;
 }
 
-const CELL = 'w-full bg-transparent rounded-md px-1.5 py-1 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white outline-none tnum text-right';
-const CELL_L = 'w-full bg-transparent rounded-md px-1.5 py-1 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white outline-none text-left';
+const CELL = 'w-full bg-transparent rounded-md px-1.5 py-0.5 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white outline-none tnum text-right';
+const CELL_L = 'w-full bg-transparent rounded-md px-1.5 py-0.5 text-xs border border-transparent hover:border-slate-200 focus:border-indigo-400 focus:bg-white outline-none text-left';
 const BOXED = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-bold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
 const FIELD = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:bg-white';
 
@@ -648,7 +633,7 @@ function Money({ v, className = '' }) {
 function Card({ title, right, className = '', children }) {
   return (
     <section className={`bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-5 min-w-0 ${className}`}>
-      <div className="flex items-start justify-between gap-2 mb-4">
+      <div className="flex items-start justify-between gap-2 mb-3.5">
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</h2>
         <div className="flex items-center gap-1.5">{right}</div>
       </div>
@@ -689,7 +674,7 @@ function ProgressRow({ lead, title, sub, valueText, valueTitle, pctText, pct, co
 function TabButton({ active, onClick, children, color = '#4f46e5', small = false }) {
   return (
     <button type="button" role="tab" aria-selected={active} onClick={onClick}
-      className={`${small ? 'text-[11px] px-2.5 py-1' : 'text-xs px-3.5 py-1.5'} font-bold rounded-lg transition whitespace-nowrap ${active ? 'text-white shadow-sm' : 'text-slate-600 bg-slate-100 hover:bg-slate-200'}`}
+      className={`${small ? 'text-[11px] px-2.5 py-1' : 'text-xs px-3 py-1.5'} font-bold rounded-lg transition whitespace-nowrap ${active ? 'text-white shadow-sm' : 'text-slate-600 bg-slate-100 hover:bg-slate-200'}`}
       style={active ? { background: color } : undefined}>{children}</button>
   );
 }
@@ -718,14 +703,14 @@ function Kpi({ label, dark, children, sub, bar, barColor, extra, className = '',
 function TableLayout({ heads, isEmpty, empty, foot, children }) {
   return (
     <div className="overflow-x-auto thin-scroll">
-      <table className="w-full text-xs min-w-[640px]">
+      <table className="w-full text-xs min-w-[620px]">
         <thead>
           <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-            {heads.map((h, i) => <th key={i} className={`px-2 py-2 whitespace-nowrap ${h.a === 'l' ? 'text-left' : 'text-right'}`}>{h.t}{h.t === '' && <span className="sr-only">Xóa</span>}</th>)}
+            {heads.map((h, i) => <th key={i} className={`px-2 py-1.5 whitespace-nowrap ${h.a === 'l' ? 'text-left' : 'text-right'}`}>{h.t}{h.t === '' && <span className="sr-only">Xóa</span>}</th>)}
           </tr>
         </thead>
         <tbody>
-          {isEmpty && <tr><td colSpan={heads.length} className="px-3 py-10 text-center text-slate-400">{empty}</td></tr>}
+          {isEmpty && <tr><td colSpan={heads.length} className="px-3 py-6 text-center text-slate-400">{empty}</td></tr>}
           {children}
         </tbody>
         {!isEmpty && foot && <tfoot>{foot}</tfoot>}
@@ -738,17 +723,17 @@ function Pnl({ amount, p }) {
   const cls = amount > 0 ? 'text-emerald-600' : amount < 0 ? 'text-rose-600' : 'text-slate-500';
   const sign = amount > 0 ? '+' : '';
   return (
-    <div className={`text-right tnum leading-tight ${cls}`}>
-      <div className="font-semibold">{sign}<Money v={amount} /></div>
-      <div className="text-[10px]">({sign}{pcv(p)})</div>
+    <div className={`text-right tnum whitespace-nowrap leading-none ${cls}`}>
+      <span className="font-bold text-xs">{sign}<Money v={amount} /></span>
+      <span className="text-[10px] ml-1 opacity-85">({sign}{pcv(p)})</span>
     </div>
   );
 }
 
 function Countdown({ days }) {
-  if (days < 0) return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700">Quá hạn {Math.abs(days)} ngày</span>;
-  if (days <= 30) return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Còn {days} ngày</span>;
-  return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700">Còn {days} ngày</span>;
+  if (days < 0) return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 ml-1">Quá hạn {Math.abs(days)}N</span>;
+  if (days <= 30) return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 ml-1">Còn {days}N</span>;
+  return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 ml-1">Còn {days}N</span>;
 }
 
 function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
@@ -798,7 +783,7 @@ function DonutChart({ actual, targets, total, size = 'w-44 h-44' }) {
           <text x="110" y="94" fontSize="12" fill="#64748b" fontWeight="600">{info.head}</text>
           <text x="110" y="110" fontSize="13" fill={info.color} fontWeight="700">{info.label}</text>
           <text x="110" y="128" fontSize="16" fill="#0f172a" fontWeight="800">{compact(info.amount)}</text>
-          <text x="110" y="143" fontSize="12" fill="#475569" fontWeight="600">{pcv(info.p, 0)}</text>
+          <text x="110" y="143" fontSize="12" fill="#475669" fontWeight="600">{pcv(info.p, 0)}</text>
         </g>
       ) : (
         <g textAnchor="middle" style={{ pointerEvents: 'none' }}>
@@ -901,12 +886,12 @@ const TONES = {
 function Insight({ items, title = 'Nhận định' }) {
   if (!items || items.length === 0) return null;
   return (
-    <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
-      <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700 mb-2"><Icon name="sparkles" size={13} />{title}</div>
-      <ul className="space-y-1.5">
+    <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 mb-1.5"><Icon name="sparkles" size={12} />{title}</div>
+      <ul className="space-y-1">
         {items.map((it, i) => (
-          <li key={i} className="flex gap-2 text-xs leading-relaxed text-slate-700">
-            <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${TONES[it.tone].dot}`} aria-hidden="true" />
+          <li key={i} className="flex gap-2 text-xs leading-snug text-slate-700">
+            <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${TONES[it.tone].dot}`} aria-hidden="true" />
             <span className="min-w-0"><b className={TONES[it.tone].head}>{it.head}</b> {it.body}</span>
           </li>
         ))}
@@ -1020,122 +1005,10 @@ function portfolioInsights(tabKey, data, c) {
   return out;
 }
 
-/* ---------- Bảng cân đối tài sản & nợ ---------- */
-const GCOLORS = { risk: '#2563eb', safe: '#0d9488', fixed: '#7c3aed' };
-function Tile({ label, value, color, sub }) {
-  return (
-    <div className="rounded-xl bg-slate-50 border border-slate-100 px-2.5 py-2 min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 truncate">{label}</p>
-      <p className={`text-base font-extrabold tnum mt-0.5 truncate ${color}`} title={vnd(value)}>{compact(value)}</p>
-      {sub && <p className="text-[10px] text-slate-500 tnum truncate">{sub}</p>}
-    </div>
-  );
-}
-function RatioChip({ label, value, tone, hint }) {
-  const cls = { good: 'bg-emerald-50 text-emerald-700 border-emerald-100', warn: 'bg-amber-50 text-amber-700 border-amber-100', bad: 'bg-rose-50 text-rose-700 border-rose-100', info: 'bg-slate-50 text-slate-700 border-slate-200' }[tone];
-  return (
-    <div className={`rounded-xl border px-2.5 py-2 min-w-0 ${cls}`} title={hint}>
-      <p className="text-[10px] font-bold uppercase tracking-wide opacity-80 truncate">{label}</p>
-      <p className="text-sm font-extrabold tnum mt-0.5 truncate">{value}</p>
-    </div>
-  );
-}
-function BalanceCard({ data, setData, c }) {
-  const setDebt = (k, v) => setData((d) => ({ ...d, debts: { ...d.debts, [k]: v } }));
-  const debtPct = c.total > 0 ? Math.min(100, (c.debt / c.total) * 100) : 0;
-  const equityPct = c.total > 0 ? 100 - debtPct : 0;
-  const runway = c.spent > 0 ? (c.bankTotal + data.cash) / c.spent : 0;
-  const riskShare = c.total > 0 ? (c.groups[0].assets / c.total) * 100 : 0;
-  const debtTone = debtPct <= 30 ? 'good' : debtPct <= 50 ? 'warn' : 'bad';
-  const runTone = c.spent <= 0 ? 'info' : runway >= 6 ? 'good' : runway >= 3 ? 'warn' : 'bad';
-  const levTone = { good: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-rose-50 text-rose-700' }[debtTone];
-  return (
-    <Card title="Bảng cân đối tài sản & nợ" right={<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${levTone}`}>ĐÒN BẨY {pcv(debtPct, 0)}</span>}>
-      <div className="grid grid-cols-3 gap-2">
-        <Tile label="Tổng tài sản" value={c.total} color="text-slate-900" />
-        <Tile label="Tổng nợ" value={c.debt} color="text-orange-600" />
-        <Tile label="Vốn chủ sở hữu" value={c.net} color={c.net < 0 ? 'text-rose-600' : 'text-blue-700'} sub={`${pcv(equityPct, 0)} tài sản`} />
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600 mb-1">
-          <span>Cơ cấu nguồn vốn</span>
-          <span className="tnum">Vốn chủ {pcv(equityPct, 0)} · Nợ {pcv(debtPct, 0)}</span>
-        </div>
-        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100" role="img" aria-label={`Vốn chủ ${pcv(equityPct, 0)}, nợ ${pcv(debtPct, 0)}`}>
-          {c.total > 0 && <div style={{ width: equityPct + '%', background: '#2563eb' }} title={`Vốn chủ: ${vnd(c.net)}`} />}
-          {c.total > 0 && debtPct > 0 && <div style={{ width: debtPct + '%', background: '#f97316' }} title={`Nợ: ${vnd(c.debt)}`} />}
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="text-[11px] font-semibold text-slate-600 mb-1">Cơ cấu tài sản theo thanh khoản</div>
-        <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 gap-px" role="img" aria-label="Cơ cấu tài sản theo nhóm thanh khoản">
-          {c.groups.map((g) => g.assets > 0 && c.total > 0 ? <div key={g.key} style={{ width: (g.assets / c.total) * 100 + '%', background: GCOLORS[g.key] }} title={`${g.label}: ${vnd(g.assets)}`} /> : null)}
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-slate-600">
-          {c.groups.map((g) => (
-            <span key={g.key} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />{g.label.replace('Tài sản ', '')} <b className="tnum text-slate-800">{pcv(c.total > 0 ? (g.assets / c.total) * 100 : 0, 0)}</b></span>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-2.5">
-        {c.groups.map((g) => {
-          const share = c.total > 0 ? (g.assets / c.total) * 100 : 0;
-          const ltv = g.assets > 0 ? (g.debt / g.assets) * 100 : 0;
-          const eq = Math.max(0, g.equity);
-          const dShown = Math.min(g.debt, g.assets);
-          const ltvCls = ltv > 70 ? 'bg-rose-50 text-rose-700' : ltv > 40 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600';
-          return (
-            <div key={g.key} className="rounded-xl border border-slate-200 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full shrink-0" style={{ background: GCOLORS[g.key] }} aria-hidden="true" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-800 truncate">{g.label}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{g.sub}</p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-extrabold text-slate-900 tnum" title={vnd(g.assets)}>{compact(g.assets)}</p>
-                  <p className="text-[11px] text-slate-500 tnum">{pcv(share, 0)} tổng TS</p>
-                </div>
-              </div>
-              <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mt-2.5">
-                {g.assets > 0 && <div style={{ width: (eq / g.assets) * 100 + '%', background: GCOLORS[g.key] }} title={`Vốn chủ: ${vnd(g.equity)}`} />}
-                {g.assets > 0 && dShown > 0 && <div style={{ width: (dShown / g.assets) * 100 + '%', background: g.debtColor }} title={`${g.debtLabel}: ${vnd(g.debt)}`} />}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 text-xs text-slate-500 tnum">
-                <span>Vốn chủ <b className={g.equity < 0 ? 'text-rose-600' : 'text-slate-800'} title={vnd(g.equity)}>{compact(g.equity)}</b></span>
-                {g.debt > 0 && g.assets > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ltvCls}`}>Nợ / TS nhóm {pcv(ltv, 0)}</span>}
-                {g.debt > g.assets && <span className="font-semibold text-rose-600">Nợ vượt tài sản nhóm</span>}
-              </div>
-              <label htmlFor={`debt-${g.key}`} className="flex items-center justify-between gap-2 mt-2">
-                <span className="text-xs font-semibold" style={{ color: g.debtInk }}>{g.debtLabel}</span>
-                <span className="inline-flex items-center gap-1">
-                  <NumInput id={`debt-${g.key}`} value={data.debts[g.key]} onChange={(v) => setDebt(g.key, v)} className="w-36 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-right text-xs font-bold tnum text-slate-800 outline-none focus:border-indigo-400 focus:bg-white" />
-                  <span className="text-xs text-slate-500">₫</span>
-                </span>
-              </label>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 mt-4">
-        <RatioChip label="Nợ / Tài sản" value={pcv(debtPct, 0)} tone={debtTone} hint="Dưới 30% an toàn · 30-50% cần theo dõi · trên 50% rủi ro cao" />
-        <RatioChip label="Quỹ dự phòng" value={c.spent > 0 ? trim2(runway) + ' tháng' : '—'} tone={runTone} hint="(Tiền gửi + tiền mặt) / chi tiêu tháng. Chuẩn khuyến nghị 6 tháng." />
-        <RatioChip label="TS rủi ro" value={pcv(riskShare, 0)} tone="info" hint="Cổ phiếu / tổng tài sản" />
-      </div>
-    </Card>
-  );
-}
-
 const TABS = [
-  { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã cổ phiếu' },
-  { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm loại vàng' },
-  { key: 'savings', label: 'Sổ Tiết Kiệm', color: '#0d9488', ink: '#0f766e', cls: 'bank', add: 'Thêm sổ tiết kiệm' },
+  { key: 'stocks', label: 'Cổ phiếu', color: '#2563eb', ink: '#1d4ed8', cls: 'stock', add: 'Thêm mã CP' },
+  { key: 'gold', label: 'Vàng', color: '#d97706', ink: '#b45309', cls: 'gold', add: 'Thêm vàng' },
+  { key: 'savings', label: 'Sổ Tiết Kiệm', color: '#0d9488', ink: '#0f766e', cls: 'bank', add: 'Thêm sổ TK' },
 ];
 const FIELDS = {
   stocks: [
@@ -1188,18 +1061,18 @@ function AddModal({ tab, onSubmit, onClose }) {
   );
 }
 
-const PH_TEXT = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none focus:border-indigo-400 focus:bg-white';
-const PH_NUM = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
+const PH_TEXT = 'rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-extrabold outline-none focus:border-indigo-400 focus:bg-white';
+const PH_NUM = 'w-full rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs font-semibold tnum text-right outline-none focus:border-indigo-400 focus:bg-white';
 function PField({ id, label, children }) {
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5 truncate">{label}</label>
+      <label htmlFor={id} className="block text-[9px] font-bold uppercase tracking-wide text-slate-400 mb-0.5 truncate">{label}</label>
       {children}
     </div>
   );
 }
 
-function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
+function Portfolio({ data, setData, c, view, isCombined }) {
   const [tabKey, setTabKey] = useState('stocks');
   const [adding, setAdding] = useState(false);
   const tab = TABS.find((t) => t.key === tabKey);
@@ -1213,13 +1086,13 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
     setData((d) => ({ ...d, [tabKey]: [...d[tabKey], row] }));
     setAdding(false);
   };
-  const tickPrices = () => setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) }));
+
   const totalOf = { stocks: c.stockTotal, gold: c.goldTotal, savings: c.bankTotal }[tabKey];
   const rows = data[tabKey];
   const st = c.pct[tab.cls] - data.targets[tab.cls];
   const stText = Math.abs(st) <= 2 ? 'Cân đối' : st < 0 ? `Thiếu ${pcv(Math.abs(st))} so mục tiêu` : `Vượt ${pcv(st)} so mục tiêu`;
   const stCls = Math.abs(st) <= 2 ? 'bg-emerald-50 text-emerald-700' : st < 0 ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700';
-  const TD = 'px-2 py-1';
+  const TD = 'px-2 py-0.5';
   const targetSum = (key) => sum(data[key], (r) => r.target);
   const tgtCls = (key) => (Math.abs(targetSum(key) - 100) > 0.001 ? 'text-rose-600' : 'text-slate-700');
 
@@ -1230,7 +1103,7 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
       const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
       return (
         <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
-          <td className={`${TD} w-28`}>
+          <td className={`${TD} w-24`}>
             <div className="flex items-center gap-1">
               <input id={`stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${CELL_L} font-bold uppercase`} />
               {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
@@ -1238,12 +1111,7 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
           </td>
           <td className={`${TD} w-24`}><NumInput id={`stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={CELL} /></td>
           <td className={`${TD} w-28`}><NumInput id={`stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={CELL} /></td>
-          <td className={`${TD} w-32`}>
-            <div className="flex items-center gap-0.5">
-              <span className={r.dir > 0 ? 'text-emerald-600' : r.dir < 0 ? 'text-rose-600' : 'text-transparent'} aria-hidden="true"><Icon name={r.dir < 0 ? 'down' : 'up'} size={10} /></span>
-              <NumInput id={`stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={CELL} />
-            </div>
-          </td>
+          <td className={`${TD} w-28`}><NumInput id={`stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={CELL} /></td>
           <td className={`${TD} text-right font-bold text-slate-900 whitespace-nowrap`}><Money v={value} /></td>
           <td className={`${TD} whitespace-nowrap`}><Pnl amount={pnl} p={pp} /></td>
           <td className={`${TD} text-right tnum text-slate-600`}>{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)}</td>
@@ -1255,11 +1123,11 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
     const tp = sum(rows, (r) => r.qty * (r.price - r.cost)), tc = sum(rows, (r) => r.qty * r.cost);
     foot = (
       <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-        <td className="px-2 py-2" colSpan={4}>Tổng</td>
-        <td className="px-2 py-2 text-right"><Money v={c.stockTotal} /></td>
-        <td className="px-2 py-2"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
-        <td className="px-2 py-2 text-right tnum">100%</td>
-        <td className={`px-2 py-2 text-right tnum ${tgtCls('stocks')}`}>{pcv(targetSum('stocks'), 0)}</td><td />
+        <td className="px-2 py-1.5" colSpan={4}>Tổng</td>
+        <td className="px-2 py-1.5 text-right"><Money v={c.stockTotal} /></td>
+        <td className="px-2 py-1.5"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
+        <td className="px-2 py-1.5 text-right tnum">100%</td>
+        <td className={`px-2 py-1.5 text-right tnum ${tgtCls('stocks')}`}>{pcv(targetSum('stocks'), 0)}</td><td />
       </tr>
     );
   } else if (tabKey === 'gold') {
@@ -1268,15 +1136,15 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
       const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
       return (
         <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
-          <td className={`${TD} w-40`}>
+          <td className={`${TD} w-36`}>
             <div className="flex items-center gap-1">
               <input id={`gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${CELL_L} font-bold`} />
               {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
             </div>
           </td>
           <td className={`${TD} w-20`}><NumInput id={`gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={CELL} /></td>
-          <td className={`${TD} w-32`}><NumInput id={`gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={CELL} /></td>
-          <td className={`${TD} w-32`}><NumInput id={`gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={CELL} /></td>
+          <td className={`${TD} w-28`}><NumInput id={`gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={CELL} /></td>
+          <td className={`${TD} w-28`}><NumInput id={`gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={CELL} /></td>
           <td className={`${TD} text-right font-bold text-slate-900 whitespace-nowrap`}><Money v={value} /></td>
           <td className={`${TD} whitespace-nowrap`}><Pnl amount={pnl} p={pp} /></td>
           <td className={`${TD} text-right tnum text-slate-600`}>{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)}</td>
@@ -1288,12 +1156,12 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
     const tp = sum(rows, (r) => r.qty * (r.price - r.cost)), tc = sum(rows, (r) => r.qty * r.cost);
     foot = (
       <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-        <td className="px-2 py-2">Tổng</td>
-        <td className="px-2 py-2 text-right tnum">{String(sum(rows, (r) => r.qty)).replace('.', ',')}</td><td colSpan={2} />
-        <td className="px-2 py-2 text-right"><Money v={c.goldTotal} /></td>
-        <td className="px-2 py-2"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
-        <td className="px-2 py-2 text-right tnum">100%</td>
-        <td className={`px-2 py-2 text-right tnum ${tgtCls('gold')}`}>{pcv(targetSum('gold'), 0)}</td><td />
+        <td className="px-2 py-1.5">Tổng</td>
+        <td className="px-2 py-1.5 text-right tnum">{String(sum(rows, (r) => r.qty)).replace('.', ',')}</td><td colSpan={2} />
+        <td className="px-2 py-1.5 text-right"><Money v={c.goldTotal} /></td>
+        <td className="px-2 py-1.5"><Pnl amount={tp} p={tc > 0 ? (tp / tc) * 100 : 0} /></td>
+        <td className="px-2 py-1.5 text-right tnum">100%</td>
+        <td className={`px-2 py-1.5 text-right tnum ${tgtCls('gold')}`}>{pcv(targetSum('gold'), 0)}</td><td />
       </tr>
     );
   } else {
@@ -1302,17 +1170,17 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
       const maturity = addMonths(parseISO(r.start), Math.round(r.term));
       return (
         <tr key={r.id + (r._owner || '')} className="border-t border-slate-100 hover:bg-slate-50">
-          <td className={`${TD} w-40`}>
+          <td className={`${TD} w-36`}>
             <div className="flex items-center gap-1">
               <input id={`sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${CELL_L} font-bold`} />
               {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
             </div>
           </td>
-          <td className={`${TD} w-36`}><NumInput id={`sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={CELL} /></td>
+          <td className={`${TD} w-32`}><NumInput id={`sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={CELL} /></td>
           <td className={`${TD} w-20`}><NumInput id={`sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={CELL} /></td>
           <td className={`${TD} w-16`}><NumInput id={`sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={CELL} /></td>
           <td className={TD}><input id={`sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${CELL_L} w-32`} /></td>
-          <td className={`${TD} whitespace-nowrap`}><div className="font-semibold tnum text-slate-800">{fmtDate(maturity)}</div><Countdown days={daysBetween(TODAY, maturity)} /></td>
+          <td className={`${TD} whitespace-nowrap`}><span className="font-semibold tnum text-slate-800">{fmtDate(maturity)}</span><Countdown days={daysBetween(TODAY, maturity)} /></td>
           <td className={`${TD} text-right font-bold text-emerald-600 whitespace-nowrap`}>+<Money v={(r.principal * r.rate * r.term) / 1200} /></td>
           <td className="px-1"><IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} /></td>
         </tr>
@@ -1320,8 +1188,8 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
     });
     foot = (
       <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
-        <td className="px-2 py-2">Tổng</td><td className="px-2 py-2 text-right"><Money v={c.bankTotal} /></td><td colSpan={4} />
-        <td className="px-2 py-2 text-right text-emerald-600">+<Money v={sum(rows, (r) => (r.principal * r.rate * r.term) / 1200)} /></td><td />
+        <td className="px-2 py-1.5">Tổng</td><td className="px-2 py-1.5 text-right"><Money v={c.bankTotal} /></td><td colSpan={4} />
+        <td className="px-2 py-1.5 text-right text-emerald-600">+<Money v={sum(rows, (r) => (r.principal * r.rate * r.term) / 1200)} /></td><td />
       </tr>
     );
   }
@@ -1330,124 +1198,123 @@ function Portfolio({ data, setData, c, live, setLive, view, isCombined }) {
   const pAll = sum(rows, (r) => r.qty * (r.price - r.cost));
   const cAll = sum(rows, (r) => r.qty * r.cost);
   const interestAll = sum(rows, (r) => (r.principal * r.rate * r.term) / 1200);
+
   const phoneCards = rows.map((r) => {
     if (tabKey === 'stocks') {
       const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
       return (
-        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-2">
-            <input id={`pc-stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="VD: FPT" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${PH_TEXT} uppercase flex-1 min-w-0`} />
-            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
-            <div className="text-right shrink-0">
-              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
-              <p className="text-[10px] text-slate-500 tnum">{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)} nhóm CP</p>
+        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <input id={`pc-stk-${r.id}-code`} aria-label="Mã cổ phiếu" value={r.code} placeholder="MÃ" onChange={(e) => upd('stocks', r.id, { code: e.target.value.toUpperCase() })} className={`${PH_TEXT} uppercase w-16`} />
+              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">{r._ownerName}</span>}
+              <span className="text-[10px] font-semibold text-slate-400 tnum">{pcv(c.stockTotal > 0 ? (value / c.stockTotal) * 100 : 0, 0)}</span>
             </div>
-            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} />
+            <div className="flex items-center gap-2 shrink-0">
+              <Money v={value} className="text-xs font-extrabold text-slate-900" />
+              <Pnl amount={pnl} p={pp} />
+              <IconBtn tone="rose" icon="trash" label={`Xóa ${r.code || 'mã CP'}`} onClick={() => del('stocks', r.id)} />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-2.5">
-            <PField id={`pc-stk-${r.id}-qty`} label="Khối lượng"><NumInput id={`pc-stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-stk-${r.id}-cost`} label="Giá vốn TB"><NumInput id={`pc-stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-stk-${r.id}-price`} label={<>Giá hiện tại <span className={r.dir > 0 ? 'text-emerald-600' : 'text-rose-600'}>{r.dir > 0 ? '▲' : r.dir < 0 ? '▼' : ''}</span></>}><NumInput id={`pc-stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={PH_NUM} /></PField>
-            <PField id={`pc-stk-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={PH_NUM} /></PField>
+          <div className="grid grid-cols-4 gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100">
+            <PField id={`pc-stk-${r.id}-qty`} label="KL"><NumInput id={`pc-stk-${r.id}-qty`} ariaLabel="Khối lượng" value={r.qty} onChange={(v) => upd('stocks', r.id, { qty: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-cost`} label="Giá vốn"><NumInput id={`pc-stk-${r.id}-cost`} ariaLabel="Giá vốn" value={r.cost} onChange={(v) => upd('stocks', r.id, { cost: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-price`} label="Giá HT"><NumInput id={`pc-stk-${r.id}-price`} ariaLabel="Giá hiện tại" value={r.price} onChange={(v) => upd('stocks', r.id, { price: v, dir: 0 })} className={PH_NUM} /></PField>
+            <PField id={`pc-stk-${r.id}-tg`} label="% Target"><NumInput id={`pc-stk-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('stocks', r.id, { target: v })} className={PH_NUM} /></PField>
           </div>
-          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
         </article>
       );
     }
     if (tabKey === 'gold') {
       const value = r.qty * r.price, pnl = r.qty * (r.price - r.cost), pp = r.cost > 0 ? ((r.price - r.cost) / r.cost) * 100 : 0;
       return (
-        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-2">
-            <input id={`pc-gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="VD: SJC" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
-            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
-            <div className="text-right shrink-0">
-              <p className="text-sm font-extrabold text-slate-900"><Money v={value} /></p>
-              <p className="text-[10px] text-slate-500 tnum">{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)} nhóm vàng</p>
+        <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <input id={`pc-gld-${r.id}-type`} aria-label="Loại vàng" value={r.type} placeholder="Loại vàng" onChange={(e) => upd('gold', r.id, { type: e.target.value })} className={`${PH_TEXT} w-28`} />
+              {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 shrink-0">{r._ownerName}</span>}
+              <span className="text-[10px] font-semibold text-slate-400 tnum">{pcv(c.goldTotal > 0 ? (value / c.goldTotal) * 100 : 0, 0)}</span>
             </div>
-            <IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} />
+            <div className="flex items-center gap-2 shrink-0">
+              <Money v={value} className="text-xs font-extrabold text-slate-900" />
+              <Pnl amount={pnl} p={pp} />
+              <IconBtn tone="rose" icon="trash" label={`Xóa ${r.type || 'loại vàng'}`} onClick={() => del('gold', r.id)} />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-2.5">
-            <PField id={`pc-gld-${r.id}-qty`} label="Số lượng (chỉ)"><NumInput id={`pc-gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-gld-${r.id}-tg`} label="% Target nhóm"><NumInput id={`pc-gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-gld-${r.id}-cost`} label="Giá vốn / chỉ"><NumInput id={`pc-gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={PH_NUM} /></PField>
-            <PField id={`pc-gld-${r.id}-price`} label="Giá hiện tại / chỉ"><NumInput id={`pc-gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={PH_NUM} /></PField>
+          <div className="grid grid-cols-4 gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100">
+            <PField id={`pc-gld-${r.id}-qty`} label="SL (chỉ)"><NumInput id={`pc-gld-${r.id}-qty`} ariaLabel="Số lượng chỉ" decimal value={r.qty} onChange={(v) => upd('gold', r.id, { qty: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-cost`} label="Giá vốn"><NumInput id={`pc-gld-${r.id}-cost`} ariaLabel="Giá vốn mỗi chỉ" value={r.cost} onChange={(v) => upd('gold', r.id, { cost: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-price`} label="Giá HT"><NumInput id={`pc-gld-${r.id}-price`} ariaLabel="Giá hiện tại mỗi chỉ" value={r.price} onChange={(v) => upd('gold', r.id, { price: v })} className={PH_NUM} /></PField>
+            <PField id={`pc-gld-${r.id}-tg`} label="% Target"><NumInput id={`pc-gld-${r.id}-tg`} ariaLabel="Phần trăm mục tiêu" decimal value={r.target} onChange={(v) => upd('gold', r.id, { target: v })} className={PH_NUM} /></PField>
           </div>
-          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100"><span className="text-[11px] font-semibold text-slate-500">Lãi / Lỗ</span><Pnl amount={pnl} p={pp} /></div>
         </article>
       );
     }
     const maturity = addMonths(parseISO(r.start), Math.round(r.term));
     return (
-      <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="flex items-center gap-2">
-          <input id={`pc-sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="VD: ACB" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${PH_TEXT} flex-1 min-w-0`} />
-          {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
-          <div className="text-right shrink-0">
-            <p className="text-sm font-extrabold text-slate-900"><Money v={r.principal} /></p>
-            <p className="text-[10px] text-slate-500 tnum">{pcv(c.bankTotal > 0 ? (r.principal / c.bankTotal) * 100 : 0, 0)} nhóm gửi</p>
+      <article key={r.id + (r._owner || '')} className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <input id={`pc-sav-${r.id}-bank`} aria-label="Ngân hàng" value={r.bank} placeholder="Ngân hàng" onChange={(e) => upd('savings', r.id, { bank: e.target.value })} className={`${PH_TEXT} w-28`} />
+            {isCombined && r._ownerName && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 shrink-0">{r._ownerName}</span>}
+            <Countdown days={daysBetween(TODAY, maturity)} />
           </div>
-          <IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} />
+          <div className="flex items-center gap-2 shrink-0">
+            <Money v={r.principal} className="text-xs font-extrabold text-slate-900" />
+            <span className="text-xs font-bold text-emerald-600 tnum">+<Money v={(r.principal * r.rate * r.term) / 1200} /></span>
+            <IconBtn tone="rose" icon="trash" label={`Xóa sổ ${r.bank || 'tiết kiệm'}`} onClick={() => del('savings', r.id)} />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-2.5">
-          <PField id={`pc-sav-${r.id}-pr`} label="Số tiền gốc"><NumInput id={`pc-sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={PH_NUM} /></PField>
-          <PField id={`pc-sav-${r.id}-rate`} label="Lãi suất %/năm"><NumInput id={`pc-sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={PH_NUM} /></PField>
-          <PField id={`pc-sav-${r.id}-term`} label="Kỳ hạn (tháng)"><NumInput id={`pc-sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={PH_NUM} /></PField>
-          <PField id={`pc-sav-${r.id}-start`} label="Ngày gửi"><input id={`pc-sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${PH_TEXT} min-w-0`} /></PField>
-        </div>
-        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-100">
-          <div><p className="text-[10px] font-bold uppercase text-slate-400">Đáo hạn</p><p className="text-xs font-semibold tnum text-slate-800">{fmtDate(maturity)}</p><Countdown days={daysBetween(TODAY, maturity)} /></div>
-          <div className="text-right"><p className="text-[10px] font-bold uppercase text-slate-400">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={(r.principal * r.rate * r.term) / 1200} /></p></div>
+        <div className="grid grid-cols-4 gap-1.5 mt-1.5 pt-1.5 border-t border-slate-100">
+          <PField id={`pc-sav-${r.id}-pr`} label="Tiền gốc"><NumInput id={`pc-sav-${r.id}-pr`} ariaLabel="Số tiền gốc" value={r.principal} onChange={(v) => upd('savings', r.id, { principal: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-rate`} label="Lãi %/năm"><NumInput id={`pc-sav-${r.id}-rate`} ariaLabel="Lãi suất" decimal value={r.rate} onChange={(v) => upd('savings', r.id, { rate: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-term`} label="Kỳ hạn (th)"><NumInput id={`pc-sav-${r.id}-term`} ariaLabel="Kỳ hạn tháng" value={r.term} onChange={(v) => upd('savings', r.id, { term: v })} className={PH_NUM} /></PField>
+          <PField id={`pc-sav-${r.id}-start`} label={`Đáo hạn ${fmtDate(maturity).slice(0,5)}`}><input id={`pc-sav-${r.id}-start`} aria-label="Ngày gửi" type="date" value={r.start} onChange={(e) => upd('savings', r.id, { start: e.target.value || toISO(TODAY) })} className={`${PH_NUM} px-1 text-left`} /></PField>
         </div>
       </article>
     );
   });
+
   const phoneFoot = (
-    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 flex items-center justify-between gap-2">
-      <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng {tab.label}</p><p className="text-base font-extrabold tnum text-slate-900"><Money v={totalOf} /></p></div>
+    <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Tổng {tab.label}:</span>
+        <span className="text-sm font-extrabold tnum text-slate-900"><Money v={totalOf} /></span>
+      </div>
       {tabKey !== 'savings'
         ? <Pnl amount={pAll} p={cAll > 0 ? (pAll / cAll) * 100 : 0} />
-        : <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Lãi dự kiến</p><p className="text-sm font-bold text-emerald-600">+<Money v={interestAll} /></p></div>}
+        : <div className="text-right text-xs font-bold text-emerald-600">Lãi: +<Money v={interestAll} /></div>}
     </div>
   );
 
   return (
     <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden min-w-0" style={{ borderTop: `4px solid ${tab.color}` }}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pt-4 pb-2">
-        <div className="min-w-0">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Nhập liệu danh mục đầu tư</h2>
-          <div role="tablist" aria-label="Danh mục đầu tư" className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pt-3.5 pb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="tablist" aria-label="Danh mục đầu tư" className="flex flex-wrap gap-1">
             {TABS.map((t) => <TabButton key={t.key} color={t.color} active={t.key === tabKey} onClick={() => setTabKey(t.key)}>{t.label}</TabButton>)}
           </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <Money v={totalOf} className="font-extrabold text-slate-900" />
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: tab.color + '22', color: tab.ink }}>{pcv(c.pct[tab.cls])} TS</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${stCls}`}>{stText}</span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {tabKey === 'stocks' && (
-            <>
-              <label className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer select-none"><input id="live-price" type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="accent-indigo-600" />Tự chạy 4s</label>
-              <button type="button" onClick={tickPrices} className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"><Icon name="refresh" size={12} />Cập nhật giá</button>
-            </>
-          )}
-          <button type="button" onClick={() => setAdding(true)} aria-label={tab.add} title={tab.add} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg text-white hover:opacity-90 active:scale-95 transition" style={{ background: tab.color }}><Icon name="plus" size={14} />{tab.add}</button>
-        </div>
+        <button type="button" onClick={() => setAdding(true)} aria-label={tab.add} title={tab.add} className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg text-white hover:opacity-90 active:scale-95 transition" style={{ background: tab.color }}><Icon name="plus" size={14} />{tab.add}</button>
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 pb-3 text-xs">
-        <span className="font-bold text-slate-700">{tab.label}:</span>
-        <Money v={totalOf} className="font-extrabold text-slate-900" />
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: tab.color + '22', color: tab.ink }}>{pcv(c.pct[tab.cls])} Tổng TS</span>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${stCls}`}>{stText}</span>
-      </div>
+
       {phone ? (
-        <div className="px-3 pb-3 space-y-2.5">
-          {rows.length === 0 && <p className="text-xs text-slate-400 text-center py-8">Chưa có dữ liệu {tab.label.toLowerCase()}. Bấm “{tab.add}” để nhập.</p>}
+        <div className="px-3 pb-2.5 space-y-1.5">
+          {rows.length === 0 && <p className="text-xs text-slate-400 text-center py-6">Chưa có dữ liệu {tab.label.toLowerCase()}. Bấm “{tab.add}” để nhập.</p>}
           {phoneCards}
           {rows.length > 0 && phoneFoot}
         </div>
       ) : (
-        <div className="max-h-[420px] overflow-y-auto thin-scroll">
+        <div className="max-h-[280px] overflow-y-auto thin-scroll">
           <TableLayout heads={heads} isEmpty={rows.length === 0} empty={`Chưa có dữ liệu ${tab.label.toLowerCase()}. Bấm “${tab.add}” để nhập.`} foot={foot}>{body}</TableLayout>
         </div>
       )}
-      <div className="px-4 sm:px-5 pb-4"><Insight items={portfolioInsights(tabKey, data, c)} title={`Nhận định ${tab.label.toLowerCase()}`} /></div>
+      <div className="px-4 sm:px-5 pb-3.5"><Insight items={portfolioInsights(tabKey, data, c)} title={`Nhận định ${tab.label.toLowerCase()}`} /></div>
       {adding && <AddModal tab={tab} onSubmit={addRow} onClose={() => setAdding(false)} />}
     </section>
   );
@@ -1554,19 +1421,19 @@ function SpendingCard({ data, setData, c, view }) {
   );
 }
 
+/* ---------- MỤC TIÊU TÀI CHÍNH (TINH GỌN, ÍT CHỮ, ĐẦY ĐỦ CHỨC NĂNG) ---------- */
 function projectGoal(g, surplus) {
   const rem = Math.max(0, g.target - g.current);
   const deadline = parseISO(g.deadline);
   const daysLeft = daysBetween(TODAY, deadline);
-  if (g.target > 0 && rem === 0) return { kind: 'done', line: 'Đã đủ số tiền mục tiêu', rem };
-  if (g.target <= 0) return { kind: 'none', line: 'Nhập số tiền mục tiêu để xem dự phóng', rem };
-  if (surplus <= 0) return { kind: 'bad', line: 'Thặng dư ≤ 0, chưa thể tích lũy thêm', rem };
+  if (g.target > 0 && rem === 0) return { kind: 'done', short: '✓ Hoàn thành', rem };
+  if (g.target <= 0) return { kind: 'none', short: 'Chưa đặt số tiền', rem };
+  if (surplus <= 0) return { kind: 'bad', short: '⚠️ Thặng dư ≤ 0', rem };
   const months = Math.ceil(rem / surplus);
-  const line = `Nếu dồn 100% thặng dư (${compact(surplus)}/th), cần ${months} tháng`;
-  if (daysLeft < 0) return { kind: 'bad', line, verdict: `Đã quá hạn ${Math.abs(daysLeft)} ngày`, rem };
+  if (daysLeft < 0) return { kind: 'bad', short: `⚠️ Quá hạn ${Math.abs(daysLeft)}N · Cần ${months}th`, rem };
   const monthsLeft = daysLeft / 30.4375;
-  if (months <= monthsLeft) return { kind: 'ok', line, verdict: `Kịp hạn, dư ~${Math.max(0, Math.floor(monthsLeft - months))} tháng`, rem };
-  return { kind: 'bad', line, verdict: `Không kịp hạn, trễ ~${Math.round(months - monthsLeft)} tháng. Cần ${compact(rem / Math.max(1, Math.floor(monthsLeft)))}/tháng`, rem };
+  if (months <= monthsLeft) return { kind: 'ok', short: `⏱ ~${months} tháng · Kịp hạn`, rem };
+  return { kind: 'bad', short: `⚠️ Cần ${compact(rem / Math.max(1, Math.floor(monthsLeft)))}/th để kịp`, rem };
 }
 
 function GoalsCard({ data, setData, c }) {
@@ -1588,13 +1455,7 @@ function GoalsCard({ data, setData, c }) {
     if (!preset) setEditId(id);
   };
 
-  const poolAvail = {
-    bank: c.bankTotal,
-    cash: data.cash,
-    gold: c.goldTotal,
-    stock: c.stockTotal,
-  };
-
+  const poolAvail = { bank: c.bankTotal, cash: data.cash, gold: c.goldTotal, stock: c.stockTotal };
   const poolStats = {};
   const goalAllocStatus = {};
 
@@ -1618,142 +1479,95 @@ function GoalsCard({ data, setData, c }) {
 
     poolStats[srcKey] = {
       key: srcKey,
-      label: GOAL_SOURCES.find((s) => s.key === srcKey).label,
+      label: GOAL_SOURCES.find((s) => s.key === srcKey).short,
       avail,
       totalUsed,
       balance,
-      count: goalsInSrc.length,
       goalsInSrc
     };
   });
 
   const overdrawnPools = Object.values(poolStats).filter((p) => p.balance < 0);
-
-  const suggestions = [];
   const emergencyTarget = c.spent > 0 ? c.spent * 6 : 42000000;
   const hasEmergencyGoal = data.goals.some((g) => /khẩn cấp|dự phòng/i.test(g.name));
-
-  if (!hasEmergencyGoal) {
-    suggestions.push({
-      id: 'sug-emg',
-      tone: 'amber',
-      text: `Bạn chưa có Quỹ khẩn cấp (chuẩn 6 tháng chi tiêu = ${compact(emergencyTarget)}). Nên ưu tiên số 1 từ Tiền gửi NH để bảo vệ tài sản.`,
-      actionLabel: '+ Tạo Quỹ khẩn cấp',
-      onAction: () => add({
-        name: 'Quỹ khẩn cấp 6 tháng',
-        current: Math.min(c.bankTotal, emergencyTarget),
-        target: emergencyTarget,
-        deadline: toISO(addMonths(TODAY, 6)),
-        source: 'bank',
-        priority: 1
-      })
-    });
-  }
-
-  overdrawnPools.forEach((p) => {
-    const lowPrioGoals = p.goalsInSrc.filter((g) => goalAllocStatus[g.id]?.uncovered > 0);
-    const names = lowPrioGoals.map((g) => `“${g.name}” (Ưu tiên ${g.priority || 2})`).join(', ');
-    suggestions.push({
-      id: `sug-over-${p.key}`,
-      tone: 'rose',
-      text: `Nguồn ${p.label} đang chỉ có ${compact(p.avail)} nhưng bạn phân bổ tới ${compact(p.totalUsed)} (Đang âm ${compact(Math.abs(p.balance))}). Khuyến nghị: Giảm số tiền hiện có hoặc lùi độ ưu tiên của ${names || 'mục tiêu phụ'}.`
-    });
-  });
 
   const activeGoals = data.goals
     .filter((g) => g.target > g.current)
     .slice()
     .sort((a, b) => (a.priority || 2) - (b.priority || 2) || daysBetween(TODAY, parseISO(a.deadline)) - daysBetween(TODAY, parseISO(b.deadline)));
 
-  if (c.surplus > 0 && activeGoals.length > 0) {
-    const topG = activeGoals[0];
-    const rem = topG.target - topG.current;
-    const mNeed = Math.ceil(rem / c.surplus);
-    suggestions.push({
-      id: 'sug-surplus',
-      tone: 'indigo',
-      text: `Gợi ý ưu tiên thặng dư (+${compact(c.surplus)}/tháng): Nên dồn trước cho “${topG.name}” (Ưu tiên ${topG.priority || 2}, còn thiếu ${compact(rem)}). Chỉ mất khoảng ${mNeed} tháng để hoàn thành dứt điểm.`
-    });
-  } else if (c.surplus <= 0 && activeGoals.length > 0) {
-    suggestions.push({
-      id: 'sug-nosurplus',
-      tone: 'amber',
-      text: `Thặng dư tháng đang ≤ 0 (${compact(c.surplus)}). Bạn cần cắt giảm chi tiêu hoặc tăng thu nhập để có dòng tiền nuôi ${activeGoals.length} mục tiêu đang chạy.`
-    });
-  }
-
-  const freeBank = Math.max(0, poolStats.bank.balance);
-  const freeCash = Math.max(0, poolStats.cash.balance);
-  if ((freeBank + freeCash) >= 10000000 && activeGoals.length > 0) {
-    const topG = activeGoals[0];
-    suggestions.push({
-      id: 'sug-idle',
-      tone: 'emerald',
-      text: `Bạn đang còn ${compact(freeBank + freeCash)} vốn thanh khoản chưa gán mục tiêu (${compact(freeBank)} Tiền gửi NH, ${compact(freeCash)} Tiền mặt). Có thể phân bổ thêm vào “${topG.name}” để rút ngắn thời gian.`
-    });
-  }
+  const topG = activeGoals[0];
+  const freeLiquid = Math.max(0, poolStats.bank.balance) + Math.max(0, poolStats.cash.balance);
 
   return (
-    <Card title="Tiến độ mục tiêu & Phân bổ nguồn tiền" right={<IconBtn icon="plus" label="Thêm mục tiêu" onClick={() => add()} />}>
-      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kiểm tra nguồn vốn cấp cho mục tiêu</span>
-          <span className="text-[10px] font-semibold text-slate-400">Đã gán / Thực có</span>
+    <Card
+      title="Mục tiêu tài chính"
+      right={
+        <div className="flex items-center gap-1">
+          {!hasEmergencyGoal && (
+            <button
+              type="button"
+              onClick={() => add({
+                name: 'Quỹ khẩn cấp 6 tháng',
+                current: Math.min(c.bankTotal, emergencyTarget),
+                target: emergencyTarget,
+                deadline: toISO(addMonths(TODAY, 6)),
+                source: 'bank',
+                priority: 1
+              })}
+              className="text-[10px] font-bold px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100"
+            >
+              + Quỹ khẩn cấp
+            </button>
+          )}
+          <IconBtn icon="plus" label="Thêm mục tiêu" onClick={() => add()} />
         </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          {['bank', 'cash', 'gold', 'stock'].map((k) => {
-            const st = poolStats[k];
-            if (st.avail === 0 && st.totalUsed === 0) return null;
-            const isOver = st.balance < 0;
-            return (
-              <div key={k} className={`rounded-lg border px-2 py-1.5 text-xs ${isOver ? 'bg-rose-50 border-rose-300 text-rose-900' : 'bg-white border-slate-200 text-slate-700'}`}>
-                <div className="flex items-center justify-between font-bold">
-                  <span className="truncate">{st.label}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isOver ? 'bg-rose-600 text-white' : 'bg-emerald-50 text-emerald-700'}`}>
-                    {isOver ? `Âm ${compact(Math.abs(st.balance))}` : `Dư ${compact(st.balance)}`}
-                  </span>
-                </div>
-                <div className="text-[11px] tnum mt-0.5 text-slate-500">
-                  Dùng <b className={isOver ? 'text-rose-700' : 'text-slate-800'}>{compact(st.totalUsed)}</b> / {compact(st.avail)}
-                </div>
+      }
+    >
+      {/* NGUỒN VỐN GỌN GÀNG */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2.5">
+        {['bank', 'cash', 'gold', 'stock'].map((k) => {
+          const st = poolStats[k];
+          if (st.avail === 0 && st.totalUsed === 0) return null;
+          const isOver = st.balance < 0;
+          const usedPct = st.avail > 0 ? (st.totalUsed / st.avail) * 100 : (st.totalUsed > 0 ? 100 : 0);
+          return (
+            <div key={k} className={`rounded-xl border px-2.5 py-1.5 ${isOver ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                <span className="text-slate-600 truncate">{st.label}</span>
+                <span className={`tnum ${isOver ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {isOver ? `Âm ${compact(Math.abs(st.balance))}` : `Dư ${compact(st.balance)}`}
+                </span>
               </div>
-            );
-          })}
-        </div>
+              <div className="my-1"><Bar h="h-1" pct={usedPct} color={isOver ? '#e11d48' : '#4f46e5'} label={st.label} /></div>
+              <div className="text-[10px] text-slate-400 tnum truncate">
+                Gán <b className="text-slate-700">{compact(st.totalUsed)}</b> / {compact(st.avail)}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {overdrawnPools.length > 0 && (
-        <div className="mb-3 rounded-xl border-2 border-rose-500 bg-rose-50 p-3 text-xs text-rose-900" role="alert">
-          <div className="flex items-center gap-1.5 font-extrabold text-rose-700 uppercase tracking-wide text-[11px]">
-            <Icon name="alert" size={15} /> Cảnh báo vượt ngân sách nguồn tiền!
-          </div>
+      {/* CẢNH BÁO & GỢI Ý 1 DÒNG NGẮN GỌN */}
+      {(overdrawnPools.length > 0 || topG || freeLiquid >= 10000000) && (
+        <div className="flex flex-col gap-1 mb-2.5">
           {overdrawnPools.map((p) => (
-            <p key={p.key} className="mt-1 leading-relaxed">
-              • Nguồn <b>{p.label}</b> chỉ có thực tế <b>{compact(p.avail)}</b> nhưng tổng các mục tiêu lấy từ nguồn này lên tới <b>{compact(p.totalUsed)}</b> (Đang bị âm <b>{compact(Math.abs(p.balance))}</b>). Hãy chọn mục tiêu quan trọng làm <b>Ưu tiên 1</b> hoặc giảm số tiền phân bổ!
-            </p>
-          ))}
-        </div>
-      )}
-
-      {suggestions.length > 0 && (
-        <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-indigo-700">
-            <Icon name="sparkles" size={14} /> Gợi ý &amp; Ưu tiên dòng tiền
-          </div>
-          {suggestions.map((s) => (
-            <div key={s.id} className="text-[11px] leading-relaxed text-slate-700 flex flex-wrap items-center justify-between gap-2 bg-white/80 rounded-lg px-2.5 py-1.5 border border-indigo-100/80">
-              <span className="flex-1 min-w-[180px]">{s.text}</span>
-              {s.onAction && (
-                <button type="button" onClick={s.onAction} className="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-500">
-                  {s.actionLabel}
-                </button>
-              )}
+            <div key={p.key} className="flex items-center gap-1.5 rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-1 text-[11px] font-semibold text-rose-800">
+              <Icon name="alert" size={12} />
+              <span className="truncate">Nguồn <b>{p.label}</b> vượt quá thực có <b>{compact(Math.abs(p.balance))}</b></span>
             </div>
           ))}
+          {topG && c.surplus > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-50/70 border border-indigo-100 px-2.5 py-1 text-[11px] text-indigo-900">
+              <span className="truncate">💡 Ưu tiên <b>{topG.name}</b>: thiếu <b>{compact(topG.target - topG.current)}</b> (~{Math.ceil((topG.target - topG.current) / c.surplus)} tháng thặng dư)</span>
+              {freeLiquid >= 10000000 && <span className="shrink-0 text-[10px] font-bold text-emerald-700">Còn {compact(freeLiquid)} tiền rỗi</span>}
+            </div>
+          )}
         </div>
       )}
 
-      <div className="space-y-3">
+      {/* DANH SÁCH MỤC TIÊU TINH GỌN */}
+      <div className="space-y-2">
         {data.goals.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Chưa có mục tiêu. Bấm + để thêm.</p>}
         {data.goals.map((g) => {
           const p = g.target > 0 ? (g.current / g.target) * 100 : 0;
@@ -1766,73 +1580,69 @@ function GoalsCard({ data, setData, c }) {
           const isShortfall = alloc && alloc.uncovered > 0;
 
           return (
-            <article key={g.id + (g._owner || '')} className={`rounded-xl border p-3 transition ${isShortfall ? 'border-rose-400 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60'}`}>
+            <article key={g.id + (g._owner || '')} className={`rounded-xl border px-3 py-2.5 transition ${isShortfall ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 bg-white'}`}>
               <div className="flex items-center gap-1.5">
-                {editing
-                  ? <input id={`goal-${g.id}-name`} aria-label="Tên mục tiêu" value={g.name} onChange={(e) => upd(g.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 font-bold bg-white border-slate-200`} />
-                  : <h3 className="flex-1 min-w-0 truncate text-sm font-bold text-slate-800">{g.name}</h3>}
-                <span className={`text-sm font-extrabold tnum ${p >= 100 ? 'text-emerald-600' : 'text-indigo-700'}`}>{pcv(p, 0)}</span>
-                <IconBtn icon={editing ? 'check' : 'edit'} label={editing ? 'Xong' : 'Sửa mục tiêu'} onClick={() => setEditId(editing ? null : g.id)} />
-                <IconBtn tone="rose" icon="trash" label={`Xóa mục tiêu ${g.name}`} onClick={() => del(g.id)} />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <select
-                  aria-label="Nguồn vốn"
-                  value={g.source || 'bank'}
-                  onChange={(e) => upd(g.id, { source: e.target.value })}
-                  className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${srcObj.bg}`}
-                >
-                  {GOAL_SOURCES.map((s) => (
-                    <option key={s.key} value={s.key}>Nguồn: {s.label}</option>
-                  ))}
-                </select>
-
                 <select
                   aria-label="Mức độ ưu tiên"
                   value={g.priority || 2}
                   onChange={(e) => upd(g.id, { priority: Number(e.target.value) })}
-                  className={`max-w-full min-w-0 text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer outline-none ${prioObj.badge}`}
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer outline-none shrink-0 ${prioObj.badge}`}
                 >
-                  {PRIORITIES.map((pr) => (
-                    <option key={pr.v} value={pr.v}>{pr.label}</option>
-                  ))}
+                  {PRIORITIES.map((pr) => <option key={pr.v} value={pr.v}>{pr.label}</option>)}
                 </select>
+
+                {editing
+                  ? <input id={`goal-${g.id}-name`} aria-label="Tên mục tiêu" value={g.name} onChange={(e) => upd(g.id, { name: e.target.value })} className={`${CELL_L} flex-1 min-w-0 font-bold bg-slate-50 border-slate-200`} />
+                  : <h3 className="flex-1 min-w-0 truncate text-sm font-bold text-slate-800">{g.name}</h3>}
+
+                <span className={`text-xs font-extrabold tnum shrink-0 ${p >= 100 ? 'text-emerald-600' : 'text-indigo-700'}`}>{pcv(p, 0)}</span>
+                <IconBtn icon={editing ? 'check' : 'edit'} label={editing ? 'Xong' : 'Sửa mục tiêu'} onClick={() => setEditId(editing ? null : g.id)} />
+                <IconBtn tone="rose" icon="trash" label={`Xóa mục tiêu ${g.name}`} onClick={() => del(g.id)} />
               </div>
 
-              <div className="mt-2"><Bar pct={p} color={isShortfall ? '#e11d48' : p >= 100 ? '#16a34a' : '#4f46e5'} label={g.name} /></div>
+              <div className="my-1.5"><Bar h="h-1.5" pct={p} color={isShortfall ? '#e11d48' : p >= 100 ? '#16a34a' : '#4f46e5'} label={g.name} /></div>
 
               {editing ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2.5">
+                <div className="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-slate-100">
                   <div>
-                    <label htmlFor={`goal-${g.id}-cur`} className="text-[10px] font-bold text-slate-500">Phân bổ hiện có</label>
-                    <NumInput id={`goal-${g.id}-cur`} value={g.current} onChange={(v) => upd(g.id, { current: v })} className={`${CELL} bg-white border-slate-200 font-bold`} />
+                    <label htmlFor={`goal-${g.id}-cur`} className="block text-[9px] font-bold uppercase text-slate-400">Hiện có</label>
+                    <NumInput id={`goal-${g.id}-cur`} value={g.current} onChange={(v) => upd(g.id, { current: v })} className={PH_NUM} />
                   </div>
                   <div>
-                    <label htmlFor={`goal-${g.id}-tgt`} className="text-[10px] font-bold text-slate-500">Mục tiêu cần</label>
-                    <NumInput id={`goal-${g.id}-tgt`} value={g.target} onChange={(v) => upd(g.id, { target: v })} className={`${CELL} bg-white border-slate-200 font-bold`} />
+                    <label htmlFor={`goal-${g.id}-tgt`} className="block text-[9px] font-bold uppercase text-slate-400">Mục tiêu</label>
+                    <NumInput id={`goal-${g.id}-tgt`} value={g.target} onChange={(v) => upd(g.id, { target: v })} className={PH_NUM} />
                   </div>
                   <div>
-                    <label htmlFor={`goal-${g.id}-due`} className="text-[10px] font-bold text-slate-500">Hạn hoàn thành</label>
-                    <input id={`goal-${g.id}-due`} type="date" value={g.deadline} onChange={(e) => upd(g.id, { deadline: e.target.value || g.deadline })} className={`${CELL_L} bg-white border-slate-200`} />
+                    <label htmlFor={`goal-${g.id}-due`} className="block text-[9px] font-bold uppercase text-slate-400">Hạn</label>
+                    <input id={`goal-${g.id}-due`} type="date" value={g.deadline} onChange={(e) => upd(g.id, { deadline: e.target.value || g.deadline })} className={`${PH_NUM} px-1 text-left`} />
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-500 mt-2 tnum">
-                  <span>Đang gán: <Money v={g.current} className="font-bold text-slate-800" /> / <Money v={g.target} className="font-bold text-slate-800" /></span>
-                  <span>Hạn {fmtDate(parseISO(g.deadline))}</span>
+                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] tnum">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-600"><Money v={g.current} className="font-bold text-slate-900" /> / <Money v={g.target} className="font-semibold" /></span>
+                    <select
+                      aria-label="Nguồn vốn"
+                      value={g.source || 'bank'}
+                      onChange={(e) => upd(g.id, { source: e.target.value })}
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer outline-none ${srcObj.bg}`}
+                    >
+                      {GOAL_SOURCES.map((s) => <option key={s.key} value={s.key}>{s.short}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {isShortfall ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-600 text-white">Thiếu {compact(alloc.uncovered)} nguồn</span>
+                    ) : (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${good ? 'bg-emerald-50 text-emerald-700' : pj.kind === 'bad' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+                        {pj.short}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-slate-400">{fmtDate(parseISO(g.deadline))}</span>
+                  </div>
                 </div>
               )}
-
-              {isShortfall && (
-                <div className="mt-2 rounded-md bg-rose-600 text-white px-2.5 py-1.5 text-[11px] font-semibold leading-snug">
-                  ⚠️ Thiếu hụt {compact(alloc.uncovered)} từ nguồn {srcObj.label}! (Sau khi cấp cho mục tiêu ưu tiên cao hơn, nguồn này chỉ còn đủ {compact(alloc.covered)} cho mục tiêu này).
-                </div>
-              )}
-
-              <p className={`text-[11px] mt-2 leading-snug rounded-md px-2 py-1.5 ${good ? 'bg-emerald-50 text-emerald-800' : pj.kind === 'bad' ? 'bg-amber-50 text-amber-900' : 'bg-slate-100 text-slate-600'}`} title={`Còn thiếu ${vnd(pj.rem)} · thặng dư ${vnd(c.surplus)}/tháng`}>
-                {pj.line}{pj.verdict && <b className="block">{pj.verdict}</b>}
-              </p>
             </article>
           );
         })}
@@ -2272,7 +2082,6 @@ function App() {
   const [showAdminModal, setShowAdminModal] = useState(false);
 
   const [sync, setSync] = useState(window.supabaseClient ? 'loading' : 'offline');
-  const [live, setLive] = useState(false);
   const [tab, setTab] = useState('overview');
   const [history, setHistory] = useState(() => loadHistory());
   const [dark, setDark] = useDarkMode();
@@ -2331,7 +2140,6 @@ function App() {
       } catch (err) {}
     }
 
-    // Kiểm tra phiên Google OAuth trên Supabase
     let oauthUser = null;
     if (client) {
       try {
@@ -2489,7 +2297,7 @@ function App() {
     }
   };
 
-  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ (USER 1, USER 2, GỘP 2 VỢ CHỒNG, HOẶC ADMIN XEM)
+  // 3. XÁC ĐỊNH DỮ LIỆU ĐANG HIỂN THỊ
   const meUser = registry.users?.[currentUserEmail] || null;
   const partnerEmail = meUser?.partnerEmail ? cleanEmail(meUser.partnerEmail) : '';
   const partnerUser = partnerEmail && registry.users?.[partnerEmail] ? registry.users[partnerEmail] : null;
@@ -2508,7 +2316,7 @@ function App() {
     return normalizeData(meUser.data);
   }, [meUser, partnerUser, workspaceMode, inspectEmail, registry.users]);
 
-  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH (TỰ ĐỘNG LƯU VỀ ĐÚNG NGƯỜI SỞ HỮU)
+  // 4. HÀM CẬP NHẬT DỮ LIỆU THÔNG MINH
   const setData = useCallback((updater) => {
     setRegistry((prev) => {
       const curMe = prev.users?.[currentUserEmail];
@@ -2615,18 +2423,7 @@ function App() {
     setHistory(snap);
   }, [authStatus, historyScope, c.total, c.debt, c.net]);
 
-
-
-
-
-
-
-
-
-
-
-
-const flush = useCallback(async () => {
+  const flush = useCallback(async () => {
     if (authStatus !== 'authenticated' || !Object.keys(regRef.current.users || {}).length) return;
     if (!client) return;
 
@@ -2636,7 +2433,6 @@ const flush = useCallback(async () => {
 
     setSync('saving');
     try {
-      // BƯỚC 1: KÉO DỮ LIỆU MỚI NHẤT TỪ MÂY VỀ (Chống ghi đè Race Condition)
       const { data: row, error: fetchErr } = await client.from('wealthos_data').select('json_data').eq('id', 1).maybeSingle();
       if (fetchErr) throw fetchErr;
 
@@ -2646,7 +2442,6 @@ const flush = useCallback(async () => {
         const str = bytes.toString(CryptoJS.enc.Utf8);
         if (str) {
           const cloudReg = JSON.parse(str);
-          // THUẬT TOÁN MERGE: Gắn data mới của TÔI vào bản Cloud, giữ nguyên data của VỢ
           latestReg = {
             ...cloudReg,
             users: {
@@ -2660,10 +2455,9 @@ const flush = useCallback(async () => {
       const strToSave = JSON.stringify(latestReg);
       if (strToSave === lastSaved.current) {
         setSync('ready');
-        return; // Không có gì đổi, hủy lệnh lưu
+        return;
       }
 
-      // BƯỚC 2: MÃ HÓA BẢN MERGE VÀ PUSH LÊN MÂY
       const v3_vault = CryptoJS.AES.encrypt(strToSave, CLOUD_SECRET).toString();
       const { error: upsertErr } = await client.from('wealthos_data').upsert({ id: 1, json_data: { v3_vault } });
       if (upsertErr) throw upsertErr;
@@ -2671,7 +2465,6 @@ const flush = useCallback(async () => {
       lastSaved.current = strToSave;
       try { localStorage.setItem(KEY, JSON.stringify({ v3_vault })); } catch (e) {}
 
-      // Đồng bộ lại UI nếu phát hiện vợ vừa thêm khoản mới
       setRegistry(latestReg);
       setSync('ready');
     } catch (err) {
@@ -2680,7 +2473,6 @@ const flush = useCallback(async () => {
     }
   }, [authStatus, client, currentUserEmail]);
 
-  // BƯỚC 3: TỐI ƯU DEBOUNCE (Chờ 3 giây ngưng gõ phím mới mã hóa để chống lag)
   useEffect(() => {
     if (authStatus !== 'authenticated' || !Object.keys(registry.users || {}).length) return undefined;
     const str = JSON.stringify(registry);
@@ -2693,47 +2485,12 @@ const flush = useCallback(async () => {
     return () => clearTimeout(saveTimer.current);
   }, [registry, authStatus, client, flush]);
 
-
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
   const retry = () => {
     if (authStatus === 'authenticated') flush();
     else loadRemote();
   };
 
   useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch (e) { return; } }, [view]);
-  useEffect(() => {
-    if (!live) return undefined;
-    const t = setInterval(() => { setData((d) => ({ ...d, stocks: d.stocks.map(simulatePrice) })); }, 4000);
-    return () => clearInterval(t);
-  }, [live, setData]);
   useEffect(() => {
     if (!isPhone || authStatus !== 'authenticated') return undefined;
     document.documentElement.classList.add('lock');
@@ -2772,8 +2529,7 @@ const flush = useCallback(async () => {
     ? compute(mergeCoupleData(meUser.data, partnerUser.data, meUser.name, partnerUser.name, meUser.email, partnerUser.email)).net
     : c.net;
 
-  // THANH ĐIỀU KHIỂN USER 1 / USER 2 / GỘP 2 VỢ CHỒNG & ADMIN
- const coworkToolbar = (
+  const coworkToolbar = (
     <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:px-3.5 flex flex-col gap-2 shadow-sm no-print">
       <div className="flex items-center gap-1.5 overflow-x-auto thin-scroll pb-1">
         <button
@@ -2859,7 +2615,7 @@ const flush = useCallback(async () => {
   const tier = V(eff, '', 'col-span-12', 'lg:col-span-12');
   const kpiGrid = V(eff, 'grid-cols-2', 'grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]', 'grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.2fr]');
   const netSpan = V(eff, 'col-span-2', '', 'col-span-2 lg:col-span-1');
-  const midGrid = V(eff, 'grid-cols-1', 'grid-cols-[35fr_65fr]', 'grid-cols-1 lg:grid-cols-[35fr_65fr]');
+  const midGrid = V(eff, 'grid-cols-1', 'grid-cols-[40fr_60fr]', 'grid-cols-1 lg:grid-cols-[40fr_60fr]');
   const botGrid = V(eff, 'grid-cols-1', 'grid-cols-3', 'grid-cols-1 lg:grid-cols-3');
   const head = V(eff, 'flex-col', 'flex-row items-end', 'flex-col lg:flex-row lg:items-end');
 
@@ -2884,8 +2640,7 @@ const flush = useCallback(async () => {
   );
 
   const allocation = <AllocationCard data={activeData} setData={setData} c={c} view={eff} />;
-  const balance = <BalanceCard data={activeData} setData={setData} c={c} />;
-  const portfolio = <Portfolio data={activeData} setData={setData} c={c} live={live} setLive={setLive} view={eff} isCombined={workspaceMode === 'combined'} />;
+  const portfolio = <Portfolio data={activeData} setData={setData} c={c} view={eff} isCombined={workspaceMode === 'combined'} />;
   const topAssets = <TopAssetsCard data={activeData} c={c} />;
   const spending = <SpendingCard data={activeData} setData={setData} c={c} view={eff} />;
   const goals = <GoalsCard data={activeData} setData={setData} c={c} />;
@@ -2924,7 +2679,7 @@ const flush = useCallback(async () => {
         </header>
         <main ref={scrollRef} className="app-scroll flex-1 min-h-0 px-3 py-3 space-y-3">
           {coworkToolbar}
-          {tab === 'overview' && <div className="space-y-3">{kpiBlock}<NetWorthCard history={history} />{allocation}{balance}</div>}
+          {tab === 'overview' && <div className="space-y-3">{kpiBlock}<NetWorthCard history={history} />{allocation}</div>}
           {tab === 'portfolio' && <div className="space-y-3">{portfolio}</div>}
           {tab === 'cash' && <div className="space-y-3">{spending}{topAssets}</div>}
           {tab === 'goals' && <div className="space-y-3">{goals}</div>}
@@ -2995,10 +2750,8 @@ const flush = useCallback(async () => {
 
             <div className={`${tier} grid gap-4 items-start ${midGrid}`}>
               {allocation}
-              {balance}
+              <NetWorthCard history={history} />
             </div>
-
-            <div className={tier}><NetWorthCard history={history} /></div>
 
             <div className={tier}>{portfolio}</div>
 
